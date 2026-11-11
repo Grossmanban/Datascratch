@@ -2044,7 +2044,7 @@ Nodes (6): bie(), getComment(), Lie(), vLr(), wLr(), wNr()
 Cohesion: 0.25
 Nodes (8): iOS, options, bundleIdPrefix, createIntermediateGroups, deploymentTarget, developmentLanguage, groupSortPosition, xcodeVersion
 
-### Community 391 - "Новая группа"
+### Community 391 - "Снимки и история версий (§5)"
 Cohesion: 0.29
 Nodes (8): Сообщение snapshot (baseSeq), Пропуск нерасшифровываемых элементов, Политика снимков для истории версий (§5), Пороги 500 обновлений / 1 MiB, Снимки и уплотнение (§5), R-05 Снимки и уплотнение, Снимок + хвост при since ниже последнего снимка, Политика снимков для истории версий
 

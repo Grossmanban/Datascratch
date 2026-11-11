@@ -20,6 +20,7 @@ async function main() {
     statementMs: config.DB_STATEMENT_TIMEOUT_MS,
     lockMs: config.DB_LOCK_TIMEOUT_MS,
     idleInTransactionMs: config.DB_IDLE_IN_TRANSACTION_TIMEOUT_MS,
+    connectMs: config.DB_CONNECT_TIMEOUT_MS,
   });
   if (config.DB_MIGRATE_ON_START) {
     await runMigrations(database.pool);

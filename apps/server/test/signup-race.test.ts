@@ -60,6 +60,8 @@ describe('database limits', () => {
               current_setting('idle_in_transaction_session_timeout') AS it`,
     );
     expect(shown.rows[0]).toEqual({ st: '2min', lt: '30s', it: '2min' });
+    // Waiting for a connection (a new one included) is limited too: pg would wait forever.
+    expect((s.ctx.database.pool as unknown as { options: { connectionTimeoutMillis: number } }).options.connectionTimeoutMillis).toBe(15_000);
 
     const url = (s.ctx.config as { DATABASE_URL: string }).DATABASE_URL;
     const short = createDatabase(url, 2, { statementMs: 5_000, lockMs: 300, idleInTransactionMs: 5_000 });

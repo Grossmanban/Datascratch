@@ -6,7 +6,16 @@
 set -euo pipefail
 
 cd "$(dirname "$0")"
-[ -f .env ] && set -a && . ./.env && set +a
+# Read only the settings this script needs from .env, without running it as shell code: a value
+# with spaces (DS_ADMIN_EMAILS="a@x, b@y") would otherwise run as a command.
+if [ -f .env ]; then
+  while IFS= read -r line || [ -n "$line" ]; do
+    case "$line" in
+      POSTGRES_DB=* | POSTGRES_USER=* | BACKUP_DIR=* | BACKUP_KEEP_DAYS=* | STORAGE_DRIVER=*)
+        export "${line%%=*}=${line#*=}" ;;
+    esac
+  done < .env
+fi
 
 PGUSER="${POSTGRES_USER:-datascratch}"
 PGDB="${POSTGRES_DB:-datascratch}"

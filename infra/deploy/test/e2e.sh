@@ -66,7 +66,7 @@ address() {
   out="$(env -u DS_DOMAIN GITHUB_ENV="$env" "$@" "$DEPLOY_DIR/address.sh")"
   local value
   value="$(sed -n 's/^DS_DOMAIN=//p' "$env")"
-  if grep -v '^::add-mask::' <<< "$out" | grep -qF "$value"; then echo "address.sh printed the address" >&2; exit 1; fi
+  if grep -v '^::add-mask::' <<< "$out" | grep -qF -- "$value"; then echo "address.sh printed the address" >&2; exit 1; fi
   grep -qxF "::add-mask::$value" <<< "$out"
   echo "$value"
 }
@@ -89,7 +89,7 @@ node "$DEPLOY_DIR/smoke.mjs" https://localhost 180
 grep -q 'ds key' "$WORK/first-deploy.log"
 kms="$(vps sh -c "grep -E '^DS_KMS_KEY=' /opt/datascratch/.env | cut -d= -f2-")"
 [ -n "$kms" ]
-if grep -qF "$kms" "$WORK/first-deploy.log"; then echo "DS_KMS_KEY leaked into the deploy log" >&2; exit 1; fi
+if grep -qF -- "$kms" "$WORK/first-deploy.log"; then echo "DS_KMS_KEY leaked into the deploy log" >&2; exit 1; fi
 vps sh -c 'test "$(stat -c %a /opt/datascratch/.env)" = 600'
 vps test -f /etc/cron.d/datascratch-backup
 first="$(secrets_hash)"
@@ -135,8 +135,8 @@ vps sh -c 'ls /opt/datascratch/backups/pre-restore-*.dump' > /dev/null
 node "$DEPLOY_DIR/smoke.mjs" https://localhost 120
 # The key is shown only at a terminal, never into a pipe; then the reminder stops.
 if vps /opt/datascratch/ds key > "$WORK/ds-key.out" 2>&1; then echo "ds key printed without a terminal" >&2; exit 1; fi
-if grep -qF "$kms" "$WORK/ds-key.out"; then echo "ds key leaked the key into a pipe" >&2; exit 1; fi
-docker exec -t "$VPS" /opt/datascratch/ds key | grep -qF "$kms"
+if grep -qF -- "$kms" "$WORK/ds-key.out"; then echo "ds key leaked the key into a pipe" >&2; exit 1; fi
+docker exec -t "$VPS" /opt/datascratch/ds key | grep -qF -- "$kms"
 vps /opt/datascratch/ds key-saved > /dev/null
 [ -z "$(vps /opt/datascratch/ds backups 2>&1 > /dev/null)" ]
 

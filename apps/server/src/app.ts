@@ -2,7 +2,7 @@ import cors from '@fastify/cors';
 import rateLimit from '@fastify/rate-limit';
 import swagger from '@fastify/swagger';
 import { stepOf } from './lib/diag.js';
-import { hashQueue } from './lib/password.js';
+import { hashQueue, reportHashTimeouts } from './lib/password.js';
 import Fastify, { type FastifyError, type FastifyInstance, type FastifyRequest } from 'fastify';
 import {
   hasZodFastifySchemaValidationErrors,
@@ -138,6 +138,7 @@ export async function buildApp(ctx: AppContext, opts: BuildOptions = {}): Promis
     ctx.metrics.httpRequests.inc({ method: req.method, status: `${Math.floor(reply.statusCode / 100)}xx` });
   });
   watchStalls(app as unknown as FastifyInstance, ctx.database.pool);
+  reportHashTimeouts((queue) => ctx.log.warn({ hashQueue: queue }, 'password hashing timed out'));
   const { pool } = ctx.database;
   ctx.metrics.gauge('ds_db_pool_total', 'PostgreSQL pool connections.', () => pool.totalCount);
   ctx.metrics.gauge('ds_db_pool_idle', 'Idle PostgreSQL pool connections.', () => pool.idleCount);

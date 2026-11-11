@@ -55,6 +55,24 @@ final class DemoModel {
             editor.tools.allowsFingerDrawing = true
         }
         if args.contains("-hud") { showHUD = true }
+        if args.contains("-dictationPlaceholder") {
+            // A recording being recognised at the end of the first paragraph, then failing
+            // (EditorDemoUITests.testDictationPlaceholderInTheText).
+            // The tap reaches the host: the demo discards the recording (inserting text in the demo
+            // under UI tests hits its known typing crash; the replacement has unit tests).
+            editor.onDictationPlaceholderTap = { [weak self] id in
+                self?.status = "Повторить запись \(id)"
+                self?.editor.removeDictationPlaceholder(id: id)
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1) { [weak self] in
+                guard let self, let p = doc.blocks.first(where: { $0.type == NodeType.paragraph }) else { return }
+                self.editor.insertDictationPlaceholder(id: "demo", at: DictationAnchor.at(TextPosition(block: p.id, offset: .max), in: doc),
+                                                       state: .recognising(seconds: 42))
+                DispatchQueue.main.asyncAfter(deadline: .now() + 12) {
+                    self.editor.updateDictationPlaceholder(id: "demo", state: .failed(code: "asr_failed"))
+                }
+            }
+        }
         // Next turn: lines are also logged from inside touch handling.
         EditorDiagnostics.onLog = { [weak self] _ in
             DispatchQueue.main.async { self?.diagnostics = EditorDiagnostics.recent }

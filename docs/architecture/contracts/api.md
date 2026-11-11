@@ -257,6 +257,14 @@
 
 API для самих агентов (MCP и REST для агентов) описывается в потоке агентов: `docs/architecture/contracts/agents-api.md` (появится на этапе агентов).
 
+## Администрирование
+
+Только администраторы сервера — аккаунты из `DS_ADMIN_EMAILS` (как `/admin/voice`); остальным — `403`.
+
+| Метод | Путь | Смысл |
+| --- | --- | --- |
+| GET | `/admin/backup` | Состояние ночной резервной копии (`spec/06`, «Резервные копии») → `{ available, lastRun, lastSuccess, ageHours, stale }`. `lastRun`: `{ finishedAt, ok, error }` (`error` — шаг, на котором запуск сломался: `db`, `files`, `check`, `prune`; при успехе `null`) или `null`. `lastSuccess`: `{ finishedAt, dbBytes, filesBytes, count }` (`filesBytes` — `null`, если файлы хранятся в S3; `count` — сколько копий лежит на сервере) или `null`. `ageHours` — часов с последней удачной копии (одна цифра после запятой) или `null`. `stale: true` — удачной копии нет дольше 36 часов или последний запуск не удался (карточку показывать красной). `available: false` — сервер не видит состояния копий (не выкладывался через `infra/deploy` или копий ещё не было). |
+
 ## Служебное
 
 `GET /health` → `{ ok: true, version }`; `GET /openapi.json`.

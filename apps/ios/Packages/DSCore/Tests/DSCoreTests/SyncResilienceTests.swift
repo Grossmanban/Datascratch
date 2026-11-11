@@ -67,17 +67,35 @@ import Testing
         await a.stop()
     }
 
+    enum StormStart: Sendable {
+        /// Protocol 2: every connection subscribes the whole library.
+        case protocol2
+        /// Protocol 3, the library synced once before (a stored cursor): a connection asks only
+        /// what changed.
+        case resumeWithCursor
+        /// Protocol 3 before the first complete sync: every `resume` is a `reset`, one round
+        /// trip more than protocol 2 before anything is subscribed (the contract holds the
+        /// queue until `resumed`), so the drops are twice as far apart.
+        case resumeWithoutCursor
+    }
+
     /// Suspect (b): drops every few hundred ms on a slow link, with a library big enough that a
     /// full catch-up never finishes between drops. The note made on the phone was the newest
     /// document, so it was subscribed last — never, under the storm. Documents with something to
     /// send go first now.
-    @Test func aNewNoteGetsOutThroughAReconnectStorm() async throws {
+    @Test(arguments: [StormStart.protocol2, .resumeWithCursor, .resumeWithoutCursor])
+    func aNewNoteGetsOutThroughAReconnectStorm(start: StormStart) async throws {
         let server = FakeSyncServer()
+        if start == .protocol2 { await server.setMaxProtocol(2) }
         let b = try device("B", server: server)
         _ = try await library(600, on: b, server: server)
+        if start == .resumeWithCursor {
+            await b.start()
+            #expect(try await eventually(timeout: .seconds(10)) { (try? b.store.resumeState()) != nil })
+        }
         await server.setSubscribeDelayPerDoc(.milliseconds(1))
         await b.start()
-        let storm = dropper(server, deviceId: "B", every: .milliseconds(250))
+        let storm = dropper(server, deviceId: "B", every: .milliseconds(start == .resumeWithoutCursor ? 500 : 250))
         defer { storm.cancel() }
         let note = NoteDocument(noteId: EntityID.make())
         try await b.open(note.crdt, notebookId: "nb")
@@ -90,7 +108,7 @@ import Testing
             let order = await server.subscribedOrder
             let received = await server.received
             let pushes = received.filter { if case .push(let id, _, _) = $0 { return id == note.noteId } else { return false } }.count
-            print("DEBUG hellos=\(await server.helloCount()) subs-of-note=\(order.filter { $0 == note.noteId }.count) total-subs=\(order.count) pushes=\(pushes) registered=\(await server.registered.contains(note.noteId)) docs=\(await server.docs[note.noteId]?.count ?? -1) outbox=\((try? b.store.outboxCount()) ?? -1) status=\(await b.status())")
+            print("DEBUG \(start) hellos=\(await server.helloCount()) subs-of-note=\(order.filter { $0 == note.noteId }.count) total-subs=\(order.count) pushes=\(pushes) registered=\(await server.registered.contains(note.noteId)) docs=\(await server.docs[note.noteId]?.count ?? -1) outbox=\((try? b.store.outboxCount()) ?? -1) status=\(await b.status())")
         }
         #expect(ok)
         storm.cancel()

@@ -256,4 +256,9 @@ public enum CRDTUpdates {
     public static func diff(_ update: Data, stateVector: Data) throws -> Data { try diffUpdate(update: update, stateVector: stateVector) }
     /// `Y.encodeStateVectorFromUpdate`.
     public static func stateVector(of update: Data) throws -> Data { try stateVectorFromUpdate(update: update) }
+
+    /// Whether an update (v1) inserts anything: it starts with the number of struct groups, a
+    /// varuint, so a leading 0 means none. A diff against a state vector always carries the
+    /// whole delete set, so its size says nothing; this does.
+    public static func insertsContent(_ update: Data) -> Bool { update.first.map { $0 != 0 } ?? false }
 }

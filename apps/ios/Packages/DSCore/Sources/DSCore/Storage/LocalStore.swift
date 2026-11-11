@@ -199,6 +199,20 @@ public final class LocalStore: Sendable {
                 t.add(column: "firstEditSinceSnapshotAt", .datetime)
             }
         }
+        m.registerMigration("v9-requeue-connection-failures") { db in
+            // Until 2026-11-11 a send that hit a closing connection counted as a failed delivery;
+            // five drops on flaky 4G moved a document's edits to «failed», never retried by
+            // themselves (owner, build 46: a note made on the phone never reached the server).
+            // Only server answers count now; messages failed by the connection go back.
+            try LocalStore.requeueConnectionFailures(db)
+        }
+        m.registerMigration("v10-requeue-oversized-pushes") { db in
+            // Build 46 queued the whole state of every note at each launch (`open` stored the
+            // content loaded from this store as a new local update); for big, much-edited notes
+            // that was over 2 MiB and failed at once as «payload_too_large (local)». The send
+            // loop now trims big pushes to what the server lacks: give them another go.
+            try db.execute(sql: "UPDATE outbox SET failed = 0, attempts = 0 WHERE failed AND lastError = 'payload_too_large (local)' AND kind = 'push'")
+        }
         return m
     }
 }
@@ -292,6 +306,16 @@ public struct UnreadableSync: Hashable, Sendable {
     public var lastSeq: Int64
     public var deviceIds: [String]
     public var reason: String
+}
+
+/// Messages of one document still to be sent (Diagnostics → Sync).
+public struct PendingSync: Hashable, Sendable {
+    public var docId: String
+    public var count: Int
+    /// When the oldest of them was made: how long it has waited.
+    public var oldest: Date
+    /// Last error met while sending them, if any (a server code).
+    public var lastError: String?
 }
 
 /// Messages of one document that could not be delivered.
@@ -479,6 +503,46 @@ extension LocalStore {
         }
     }
 
+    /// State vector of what the server is known to have of `docId`: the stored updates that
+    /// carry a server `seq` (remote ones, acknowledged own ones, snapshots). Nil when none.
+    public func serverStateVector(docId: String) throws -> Data? {
+        try serverState(docId: docId).map { try CRDTUpdates.stateVector(of: $0) }
+    }
+
+    /// What the server is known to have of `docId`, merged into one update (nil when nothing
+    /// carries a server `seq`).
+    public func serverState(docId: String) throws -> Data? {
+        let rows = try db.read { db in
+            try Data.fetchAll(db, sql: "SELECT data FROM docUpdates WHERE docId = ? AND seq IS NOT NULL ORDER BY id", arguments: [docId])
+        }
+        guard !rows.isEmpty else { return nil }
+        return try CRDTUpdates.merge(rows)
+    }
+
+    /// Origin of the stored update behind a queued message (`system`: content the engine stored
+    /// itself, e.g. a document's whole state; older builds queued one per note per launch).
+    public func queuedOrigin(clientMsgId: String) throws -> String? {
+        try db.read { try String.fetchOne($0, sql: "SELECT origin FROM docUpdates WHERE clientMsgId = ? LIMIT 1", arguments: [clientMsgId]) }
+    }
+
+    /// Replaces the payload of a queued message (and of its stored update) — a big push trimmed
+    /// to what the server lacks.
+    public func replaceQueuedPayload(clientMsgId: String, with payload: Data) throws {
+        try db.write { db in
+            try db.execute(sql: "UPDATE outbox SET payload = ? WHERE clientMsgId = ?", arguments: [payload, clientMsgId])
+            try db.execute(sql: "UPDATE docUpdates SET data = ? WHERE clientMsgId = ? AND seq IS NULL", arguments: [payload, clientMsgId])
+        }
+    }
+
+    /// Drops a queued push the server already has in full (or that a queued snapshot carries):
+    /// the message leaves the queue and its stored update stays as local content.
+    public func dropRedundantPush(clientMsgId: String) throws {
+        try db.write { db in
+            try db.execute(sql: "DELETE FROM outbox WHERE clientMsgId = ?", arguments: [clientMsgId])
+            try db.execute(sql: "UPDATE docUpdates SET clientMsgId = NULL WHERE clientMsgId = ? AND seq IS NULL", arguments: [clientMsgId])
+        }
+    }
+
     /// Merges the stored updates of a document into one row (local compaction; does not change
     /// what the server has).
     public func compact(docId: String, now: Date = Date()) throws {
@@ -593,6 +657,69 @@ extension LocalStore {
             if let docId { request = request.filter(Column("docId") == docId) }
             return try request.fetchAll(db)
         }
+    }
+
+    /// The queued message with this id (failed ones included).
+    public func outboxItem(clientMsgId: String) throws -> OutboxItem? {
+        try db.read { try OutboxItem.filter(Column("clientMsgId") == clientMsgId).fetchOne($0) }
+    }
+
+    /// Whether `docId` has messages still to be sent (failed ones not included).
+    public func hasPendingOutbox(docId: String) throws -> Bool {
+        try db.read { try Bool.fetchOne($0, sql: "SELECT EXISTS(SELECT 1 FROM outbox WHERE docId = ? AND NOT failed)", arguments: [docId]) ?? false }
+    }
+
+    /// Queued messages of these documents only, oldest first: the send loop asks for the
+    /// documents it can send now, so one that cannot (no key, still catching up, refused) never
+    /// fills the page and blocks the rest (owner, build 46).
+    public func pendingOutbox(docIds: Set<String>, limit: Int) throws -> [OutboxItem] {
+        guard !docIds.isEmpty else { return [] }
+        return try db.read { db in
+            var items: [OutboxItem] = []
+            // SQLite caps bound parameters; documents with a queue are few, but chunk anyway.
+            let ids = Array(docIds)
+            for start in stride(from: 0, to: ids.count, by: 500) {
+                let chunk = Array(ids[start..<min(start + 500, ids.count)])
+                items += try OutboxItem.filter(Column("failed") == false && chunk.contains(Column("docId")))
+                    .order(Column("id")).limit(limit).fetchAll(db)
+            }
+            return Array(items.sorted { ($0.id ?? 0) < ($1.id ?? 0) }.prefix(limit))
+        }
+    }
+
+    /// Messages still to be sent per document, with the age of the oldest (Diagnostics), oldest
+    /// first.
+    public func pendingOutboxSummary() throws -> [PendingSync] {
+        try db.read { db in
+            try Row.fetchAll(db, sql: """
+                SELECT docId, COUNT(*) AS n, MIN(createdAt) AS oldest,
+                    (SELECT lastError FROM outbox AS o2 WHERE o2.docId = outbox.docId AND NOT o2.failed AND o2.lastError IS NOT NULL ORDER BY id DESC LIMIT 1) AS err
+                FROM outbox WHERE NOT failed GROUP BY docId ORDER BY MIN(id)
+                """).map { PendingSync(docId: $0["docId"], count: $0["n"], oldest: $0["oldest"], lastError: $0["err"]) }
+        }
+    }
+
+    /// When the oldest message still to be sent was made (nil: none).
+    public func oldestPendingAt() throws -> Date? {
+        try db.read { try Date.fetchOne($0, sql: "SELECT MIN(createdAt) FROM outbox WHERE NOT failed") }
+    }
+
+    /// Puts back messages that «failed» only because the connection broke under them (before
+    /// 2026-11-11 those counted as delivery attempts). Returns how many.
+    @discardableResult
+    public func requeueConnectionFailures() throws -> Int {
+        try db.write { db in
+            try Self.requeueConnectionFailures(db)
+            return db.changesCount
+        }
+    }
+
+    static func requeueConnectionFailures(_ db: Database) throws {
+        try db.execute(sql: """
+            UPDATE outbox SET failed = 0, attempts = 0
+            WHERE failed AND (lastError = 'closed' OR lastError = 'notConnected' OR lastError LIKE 'connection:%'
+                OR lastError LIKE '%NSURLErrorDomain%' OR lastError LIKE '%NSPOSIXErrorDomain%' OR lastError LIKE '%URLError%')
+            """)
     }
 
     /// Messages still to be sent (failed ones not included), per document.

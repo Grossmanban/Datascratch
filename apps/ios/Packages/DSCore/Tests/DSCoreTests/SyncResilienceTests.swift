@@ -171,8 +171,10 @@ import Testing
         try note.initialize(title: "t")
         try note.insertText("текст", at: 0, inBlock: [1])
         #expect(try await eventually { (try? a.store.outboxCount()) == 0 })
-        let sent = await server.received.count
         await a.close(docId: note.noteId)
+        // Closing makes the leave snapshot (spec/06); wait until it is acknowledged.
+        #expect(try await eventually { (try? a.store.outboxCount()) == 0 })
+        let sent = await server.received.count
 
         // As CoreLibrary does: load from the store, then hand it to the engine.
         let loaded = NoteDocument(noteId: note.noteId)
@@ -220,6 +222,130 @@ import Testing
         let more = String(repeating: "Новый раздел. ", count: 4_000)
         try note.insertText(more, at: 0, inBlock: [1])
         #expect(try await eventually { (await server.docs[note.noteId]?.count ?? 0) == onServer + 1 })
+        await a.stop()
+    }
+
+    // MARK: No data loss from trimming (coordinator's conditions, 2026-11-11)
+
+    /// A note with content the server has (acknowledged), for the checks below.
+    func noteOnServer(_ a: SyncEngine, _ server: FakeSyncServer, text: String) async throws -> NoteDocument {
+        let note = NoteDocument(noteId: EntityID.make())
+        try await a.open(note.crdt, notebookId: "nb")
+        try note.initialize(title: "t")
+        try note.insertText(text, at: 0, inBlock: [1])
+        #expect(try await eventually { (try? a.store.outboxCount()) == 0 })
+        return note
+    }
+
+    /// What a fresh device gets for `docId` from the server.
+    func fetched(_ docId: String, from server: FakeSyncServer) async throws -> NoteDocument {
+        let fresh = try device("fresh-\(UUID().uuidString.prefix(6))", server: server)
+        await fresh.start()
+        let copy = NoteDocument(noteId: docId)
+        try await fresh.open(copy.crdt, notebookId: "nb")
+        _ = try await eventually { (try? fresh.store.document(docId)?.lastSeq ?? 0) ?? 0 > 0 && (try? copy.block(at: [1])) != nil }
+        try await Task.sleep(for: .milliseconds(100))
+        await fresh.stop()
+        return copy
+    }
+
+    /// (1) A big push that inserts nothing new but deletes what the server still has is not
+    /// dropped: its deletion reaches the server.
+    @Test func aBigPushWithANewDeletionIsSent() async throws {
+        let server = FakeSyncServer()
+        let a = try device("A", server: server)
+        await a.start()
+        let text = String(repeating: "Абзац ТЗ. ", count: 5_000)
+        let note = try await noteOnServer(a, server, text: text)
+        await a.stop()
+        // The whole state with a deletion made outside the engine (nothing queued it).
+        let copy = NoteDocument(noteId: note.noteId)
+        try copy.crdt.applyUpdates(try a.store.updates(docId: note.noteId), origin: .storage)
+        try copy.deleteText(range: 0..<10, inBlock: [1])
+        let whole = try copy.crdt.encodeStateAsUpdate()
+        #expect(whole.count > SyncEngine.trimPushesOver)
+        try a.store.appendLocalUpdate(docId: note.noteId, update: whole, origin: .system)
+        await a.start()
+        #expect(try await eventually { (try? a.store.outboxCount()) == 0 })
+        let pushes = await server.received.filter { if case .push(let id, _, _) = $0 { return id == note.noteId } else { return false } }
+        #expect(pushes.count == 3) // initialize, the text, the deletion
+        let onServer = try await fetched(note.noteId, from: server)
+        #expect(try onServer.block(at: [1])?.text == String(text.dropFirst(10)))
+        await a.stop()
+    }
+
+    /// (2) Nothing known of the server for the document (never acknowledged): nothing is
+    /// dropped, the push goes as it is.
+    @Test func withoutTheServersStateNothingIsDropped() async throws {
+        let server = FakeSyncServer()
+        let a = try device("A", server: server)
+        let note = NoteDocument(noteId: EntityID.make())
+        try note.initialize(title: "офлайн")
+        try note.insertText(String(repeating: "много текста ", count: 4_000), at: 0, inBlock: [1])
+        let whole = try note.crdt.encodeStateAsUpdate()
+        #expect(whole.count > SyncEngine.trimPushesOver)
+        try a.store.ensureDocument(docId: note.noteId, kind: .note, notebookId: "nb")
+        // Twice, as build 46 queued it: the server must get the content (duplicates are harmless).
+        try a.store.appendLocalUpdate(docId: note.noteId, update: whole, origin: .system)
+        try a.store.appendLocalUpdate(docId: note.noteId, update: whole, origin: .system)
+        #expect(try a.store.serverStateVector(docId: note.noteId) == nil)
+        await a.start()
+        #expect(try await eventually { (try? a.store.outboxCount()) == 0 })
+        let onServer = try await fetched(note.noteId, from: server)
+        #expect(try onServer.block(at: [1])?.text == (try note.block(at: [1])?.text))
+        await a.stop()
+    }
+
+    /// (3) A new change over the 2 MiB update limit (a huge paste) is not left failed: it goes
+    /// as a snapshot (≤ 16 MiB) and a fresh device gets it.
+    @Test func aChangeOverTheUpdateLimitGoesAsASnapshot() async throws {
+        let server = FakeSyncServer()
+        let a = try device("A", server: server)
+        await a.start()
+        let note = try await noteOnServer(a, server, text: "начало")
+        let huge = String(repeating: "x", count: SyncProtocol.maxUpdateBytes + 100_000)
+        try note.insertText(huge, at: 0, inBlock: [1])
+        #expect(try await eventually(timeout: .seconds(20)) {
+            await server.snapshots[note.noteId] != nil && (try? a.store.outboxCount()) == 0
+        })
+        #expect(try a.store.failedOutbox().isEmpty)
+        let onServer = try await fetched(note.noteId, from: server)
+        #expect(try onServer.block(at: [1])?.text == huge + "начало")
+        await a.stop()
+    }
+
+    /// (4) The owner's phone: a note made offline («Баги дс») and 565 whole-state pushes of
+    /// notes the server has. After reconnect the new note is on the server and the 565 cost no
+    /// pushes at all.
+    @Test func anOfflineNoteAnd565PseudoPushes() async throws {
+        let server = FakeSyncServer()
+        let a = try device("A", server: server)
+        await a.start()
+        var notes: [NoteDocument] = []
+        for i in 0..<113 { notes.append(try await noteOnServer(a, server, text: "заметка \(i)")) }
+        await a.stop()
+        for note in notes {
+            let whole = try note.crdt.encodeStateAsUpdate()
+            for _ in 0..<5 { try a.store.appendLocalUpdate(docId: note.noteId, update: whole, origin: .system) }
+        }
+        #expect(try a.store.outboxCount() == 565)
+        let offline = NoteDocument(noteId: EntityID.make())
+        try offline.initialize(title: "Баги дс")
+        try offline.insertText("продиктовано без сети", at: 0, inBlock: [1])
+        try a.store.ensureDocument(docId: offline.noteId, kind: .note, notebookId: "nb")
+        try a.store.appendLocalUpdate(docId: offline.noteId, update: try offline.crdt.encodeStateAsUpdate(), origin: .local)
+
+        let before = await server.received.count
+        await a.start()
+        #expect(try await eventually(timeout: .seconds(10)) { (try? a.store.outboxCount()) == 0 })
+        let after = await server.received.dropFirst(before)
+        let ids = Set(notes.map(\.noteId))
+        let pseudo = after.filter { if case .push(let id, _, _) = $0 { return ids.contains(id) } else { return false } }
+        #expect(pseudo.isEmpty)
+        #expect(try a.store.failedOutbox().isEmpty)
+        let onServer = try await fetched(offline.noteId, from: server)
+        #expect(try onServer.title() == "Баги дс")
+        #expect(try onServer.block(at: [1])?.text == "продиктовано без сети")
         await a.stop()
     }
 

@@ -506,11 +506,23 @@ extension LocalStore {
     /// State vector of what the server is known to have of `docId`: the stored updates that
     /// carry a server `seq` (remote ones, acknowledged own ones, snapshots). Nil when none.
     public func serverStateVector(docId: String) throws -> Data? {
+        try serverState(docId: docId).map { try CRDTUpdates.stateVector(of: $0) }
+    }
+
+    /// What the server is known to have of `docId`, merged into one update (nil when nothing
+    /// carries a server `seq`).
+    public func serverState(docId: String) throws -> Data? {
         let rows = try db.read { db in
             try Data.fetchAll(db, sql: "SELECT data FROM docUpdates WHERE docId = ? AND seq IS NOT NULL ORDER BY id", arguments: [docId])
         }
         guard !rows.isEmpty else { return nil }
-        return try CRDTUpdates.stateVector(of: rows.count == 1 ? rows[0] : CRDTUpdates.merge(rows))
+        return try CRDTUpdates.merge(rows)
+    }
+
+    /// Origin of the stored update behind a queued message (`system`: content the engine stored
+    /// itself, e.g. a document's whole state; older builds queued one per note per launch).
+    public func queuedOrigin(clientMsgId: String) throws -> String? {
+        try db.read { try String.fetchOne($0, sql: "SELECT origin FROM docUpdates WHERE clientMsgId = ? LIMIT 1", arguments: [clientMsgId]) }
     }
 
     /// Replaces the payload of a queued message (and of its stored update) — a big push trimmed
@@ -522,8 +534,8 @@ extension LocalStore {
         }
     }
 
-    /// Drops a queued push the server already has in full: the message leaves the queue and its
-    /// stored update stays as local content (it is not attributed to any server `seq`).
+    /// Drops a queued push the server already has in full (or that a queued snapshot carries):
+    /// the message leaves the queue and its stored update stays as local content.
     public func dropRedundantPush(clientMsgId: String) throws {
         try db.write { db in
             try db.execute(sql: "DELETE FROM outbox WHERE clientMsgId = ?", arguments: [clientMsgId])

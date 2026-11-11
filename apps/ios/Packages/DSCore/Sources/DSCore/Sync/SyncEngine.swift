@@ -802,7 +802,8 @@ public actor SyncEngine: SyncClientDelegate {
                     }
                 }
                 var payload = item.payload
-                if item.kind == .push, payload.count > Self.trimPushesOver {
+                if item.kind == .push, payload.count > Self.trimPushesOver
+                    || (try? store.queuedOrigin(clientMsgId: item.clientMsgId)) == TransactionOrigin.system.description {
                     // A big push is usually a whole state (older builds queued one per note per
                     // launch): send only what the server lacks, or nothing.
                     switch trimmed(item) {
@@ -821,6 +822,17 @@ public actor SyncEngine: SyncClientDelegate {
                 let sealed = try DSCrypto.seal(payload, key: key, ad: CryptoAD.doc(item.docId))
                 let limit = item.kind == .push ? SyncProtocol.maxUpdateBytes : SyncProtocol.maxSnapshotBytes
                 guard sealed.count <= limit else {
+                    if item.kind == .push {
+                        // A change too big for one update (a huge paste, a big note made before
+                        // it was opened) goes as a snapshot of the whole document, as the web
+                        // client does; the push leaves the queue once the snapshot is queued.
+                        // Never left failed: only a document over the snapshot limit is.
+                        if await snapshot(docId: item.docId, now: Date(), force: true) {
+                            try store.dropRedundantPush(clientMsgId: item.clientMsgId)
+                            log(.pushTrimmed, docId: item.docId, "\(sealed.count) B over the update limit: sent as a snapshot")
+                            continue
+                        }
+                    }
                     try store.markFailed(clientMsgId: item.clientMsgId, error: "payload_too_large (local)", permanent: true)
                     log(.failed, docId: item.docId, "\(item.kind.rawValue) of \(sealed.count) B over the \(limit) B limit")
                     continue
@@ -858,21 +870,22 @@ public actor SyncEngine: SyncClientDelegate {
 
     private enum Trim { case redundant, smaller(Data), asIs }
 
-    /// What of a queued push the server does not have yet (its acknowledged and remote updates).
+    /// What of a queued push the server does not have yet. No data is ever lost here:
+    /// - nothing known of the server (no stored update with a `seq`): sent as it is;
+    /// - dropped only when merging it into the server's state changes nothing at all — inserts
+    ///   and deletions (byte-equal merges); otherwise
+    /// - the diff against the server's state vector is sent (all its new inserts and its
+    ///   whole delete set), when that is smaller.
     private func trimmed(_ item: OutboxItem) -> Trim {
-        guard let known = try? store.serverStateVector(docId: item.docId),
-              let rest = try? CRDTUpdates.diff(item.payload, stateVector: known) else { return .asIs }
-        if !CRDTUpdates.insertsContent(rest) {
-            // Deletions travel in every update's delete set; a push that inserts nothing new
-            // still may delete. Keep it when its delete set is what it is about (small pushes
-            // never get here).
-            return Self.deletesOnly(item.payload) ? .asIs : .redundant
+        guard let known = try? store.serverState(docId: item.docId),
+              let base = try? CRDTUpdates.merge([known]),
+              let sv = try? CRDTUpdates.stateVector(of: base),
+              let rest = try? CRDTUpdates.diff(item.payload, stateVector: sv) else { return .asIs }
+        if !CRDTUpdates.insertsContent(rest), let combined = try? CRDTUpdates.merge([base, item.payload]), combined == base {
+            return .redundant
         }
         return rest.count < item.payload.count ? .smaller(rest) : .asIs
     }
-
-    /// Whether an update inserts nothing and only deletes.
-    private static func deletesOnly(_ update: Data) -> Bool { !CRDTUpdates.insertsContent(update) }
 
     /// Subscribes documents whose key is known, all at once and without registering them first:
     /// most were made on other devices and exist on the server, and a `POST /docs` per document

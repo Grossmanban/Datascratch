@@ -14,6 +14,11 @@ import Testing
         let inner = FakeRESTServer()
         let counters = Locked((inFlight: 0, maxInFlight: 0, puts: 0, gets: 0))
         let failOnce = Locked<Int?>(nil)
+        /// How long each chunk request takes. Long enough that requests started together are
+        /// all in flight at once on a loaded CI machine.
+        let delay: Duration
+
+        init(delay: Duration = .milliseconds(30)) { self.delay = delay }
 
         func send(_ request: URLRequest) async throws -> (Data, HTTPURLResponse) {
             let parts = request.url!.path.split(separator: "/")
@@ -25,7 +30,7 @@ import Testing
                 if isPut { $0.puts += 1 } else { $0.gets += 1 }
             }
             defer { counters.withLock { $0.inFlight -= 1 } }
-            try await Task.sleep(for: .milliseconds(30))
+            try await Task.sleep(for: delay)
             if isPut, failOnce.withLock({ f in defer { if f == index { f = nil } }; return f == index }) {
                 let body = try JSONSerialization.data(withJSONObject: ["error": ["code": "internal", "message": "lost"]])
                 return (body, HTTPURLResponse(url: request.url!, statusCode: 500, httpVersion: nil, headerFields: nil)!)
@@ -87,7 +92,9 @@ import Testing
     /// «Отправляются фото: 3 из 8»: several attachments go together and the progress counts
     /// them as one batch.
     @Test func pendingUploadsGoTogetherWithProgress() async throws {
-        let server = SlowServer()
+        // One chunk per photo: with 30 ms per request a loaded run started the third after the
+        // first had finished (max 2 at once, 2026-11-11). 200 ms keeps the three overlapping.
+        let server = SlowServer(delay: .milliseconds(200))
         let a = try await device(server, email: "batch@example.com")
         let dir = folder()
         defer { try? FileManager.default.removeItem(at: dir) }

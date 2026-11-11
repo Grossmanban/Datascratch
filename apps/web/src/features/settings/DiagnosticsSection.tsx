@@ -1,5 +1,15 @@
 import { useLiveQuery } from "dexie-react-hooks";
-import { ChevronRight, ClipboardCopy, CloudOff, FileUp, KeyRound, RefreshCw, Send, Stethoscope, Wifi } from "lucide-react";
+import {
+  ChevronRight,
+  ClipboardCopy,
+  CloudOff,
+  FileUp,
+  KeyRound,
+  RefreshCw,
+  Send,
+  Stethoscope,
+  Wifi,
+} from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { request } from "@/api/client";
@@ -12,7 +22,15 @@ import { useWorkspace } from "@/domain/workspace";
 import { formatDateTime, formatRelative } from "@/lib/dates";
 import { useSyncStatus, type SyncStatus } from "@/sync/engine";
 import { Button, cn, toast } from "@/ui";
-import { browserInfo, buildReport, clearDiag, recordDiag, useDiagnostics, type DiagSnapshot } from "./diagnostics";
+import {
+  browserInfo,
+  buildReport,
+  clearDiag,
+  recordDiag,
+  useDiagnostics,
+  type DiagSnapshot,
+} from "./diagnostics";
+import { BackupCard } from "./BackupCard";
 import { Card } from "./SettingsPage";
 
 type Check = NonNullable<DiagSnapshot["check"]>;
@@ -52,7 +70,12 @@ export function DiagnosticsSection() {
   const notebooks = useWorkspace((s) => s.account.notebooks.length);
   const uploads = useAttachmentUploads();
   const waitingFiles = useLiveQuery(
-    async () => (!hasAccountDb() ? 0 : (await accountDb().attachments.toArray()).filter((a) => !a.registered || a.uploaded.length < a.chunkCount).length),
+    async () =>
+      !hasAccountDb()
+        ? 0
+        : (await accountDb().attachments.toArray()).filter(
+            (a) => !a.registered || a.uploaded.length < a.chunkCount,
+          ).length,
     [],
     0,
   );
@@ -83,7 +106,11 @@ export function DiagnosticsSection() {
     } catch {
       recordDiag("server_unreachable");
     }
-    const debug = hasRuntime() ? await runtime().syncDebug().catch(() => null) : null;
+    const debug = hasRuntime()
+      ? await runtime()
+          .syncDebug()
+          .catch(() => null)
+      : null;
     setStorage(await estimateStorage());
     setKeys(keyCounts());
     setCheck({ at: Date.now(), serverOk, serverMs, notSynced: debug?.notSynced.length ?? 0 });
@@ -131,7 +158,11 @@ export function DiagnosticsSection() {
             label={t("prefs.diag.connection")}
             tone={status === "online" ? "ok" : status === "offline" ? "muted" : "busy"}
             value={t(`prefs.diag.${status satisfies SyncStatus}`)}
-            hint={lastSyncedAt ? t("prefs.diag.lastSync", { when: formatRelative(lastSyncedAt) }) : t("prefs.diag.neverSynced")}
+            hint={
+              lastSyncedAt
+                ? t("prefs.diag.lastSync", { when: formatRelative(lastSyncedAt) })
+                : t("prefs.diag.neverSynced")
+            }
             testId="diag-connection"
             state={status}
           />
@@ -139,8 +170,14 @@ export function DiagnosticsSection() {
             icon={<Send />}
             label={t("prefs.diag.outbox")}
             tone={failedIds.length ? "bad" : pending ? "busy" : "ok"}
-            value={pending ? t("prefs.diag.outboxWaiting", { count: pending }) : t("prefs.diag.outboxEmpty")}
-            hint={failedIds.length ? t("prefs.diag.notSent", { count: failedIds.length }) : undefined}
+            value={
+              pending
+                ? t("prefs.diag.outboxWaiting", { count: pending })
+                : t("prefs.diag.outboxEmpty")
+            }
+            hint={
+              failedIds.length ? t("prefs.diag.notSent", { count: failedIds.length }) : undefined
+            }
             testId="diag-outbox"
             state={String(pending)}
           />
@@ -156,16 +193,30 @@ export function DiagnosticsSection() {
             icon={<FileUp />}
             label={t("prefs.diag.uploads")}
             tone={uploading || waitingFiles ? "busy" : "ok"}
-            value={uploading ? t("prefs.diag.uploadsWaiting", { done: batchDone, total: batch.length }) : waitingFiles ? t("prefs.diag.outboxWaiting", { count: waitingFiles }) : t("prefs.diag.uploadsIdle")}
+            value={
+              uploading
+                ? t("prefs.diag.uploadsWaiting", { done: batchDone, total: batch.length })
+                : waitingFiles
+                  ? t("prefs.diag.outboxWaiting", { count: waitingFiles })
+                  : t("prefs.diag.uploadsIdle")
+            }
             testId="diag-uploads"
           />
         </div>
         {(storage || storageFull) && (
-          <p className={cn("mt-4 text-[12.5px]", storageFull ? "font-medium text-danger" : "text-ink-2")} data-testid="diag-storage">
+          <p
+            className={cn(
+              "mt-4 text-[12.5px]",
+              storageFull ? "font-medium text-danger" : "text-ink-2",
+            )}
+            data-testid="diag-storage"
+          >
             {storageFull
               ? t("prefs.diag.storageFull")
               : `${t("prefs.diag.storage")}: ${t("prefs.diag.storageValue", { used: mb(storage!.usedMb), quota: mb(storage!.quotaMb) })} · ${
-                  storage!.persisted ? t("prefs.diag.storagePersisted") : t("prefs.diag.storageBestEffort")
+                  storage!.persisted
+                    ? t("prefs.diag.storagePersisted")
+                    : t("prefs.diag.storageBestEffort")
                 }`}
           </p>
         )}
@@ -181,17 +232,31 @@ export function DiagnosticsSection() {
             {checking ? t("prefs.diag.checking") : t("prefs.diag.checkNow")}
           </Button>
           {failedIds.length > 0 && (
-            <Button size="sm" icon={<RefreshCw className="size-3.5" />} onClick={() => void runtime().retryFailed()} data-testid="diag-resend">
+            <Button
+              size="sm"
+              icon={<RefreshCw className="size-3.5" />}
+              onClick={() => void runtime().retryFailed()}
+              data-testid="diag-resend"
+            >
               {t("prefs.diag.resend")}
             </Button>
           )}
           {check && (
-            <div className="ml-1 min-w-0 text-[12.5px] leading-snug text-ink-2" role="status" data-testid="diag-check-result" data-server={check.serverOk ? "ok" : "down"}>
+            <div
+              className="ml-1 min-w-0 text-[12.5px] leading-snug text-ink-2"
+              role="status"
+              data-testid="diag-check-result"
+              data-server={check.serverOk ? "ok" : "down"}
+            >
               <span className={cn("font-medium", check.serverOk ? "text-ink" : "text-danger")}>
-                {check.serverOk ? t("prefs.diag.serverOk", { ms: check.serverMs }) : t("prefs.diag.serverDown")}
+                {check.serverOk
+                  ? t("prefs.diag.serverOk", { ms: check.serverMs })
+                  : t("prefs.diag.serverDown")}
               </span>
               {" · "}
-              {check.notSynced ? t("prefs.diag.notSynced", { count: check.notSynced }) : t("prefs.diag.allSynced")}
+              {check.notSynced
+                ? t("prefs.diag.notSynced", { count: check.notSynced })
+                : t("prefs.diag.allSynced")}
               {" · "}
               {t("prefs.diag.checkedAt", { when: formatRelative(check.at) })}
             </div>
@@ -206,23 +271,39 @@ export function DiagnosticsSection() {
         description={t("prefs.diag.reportText")}
         testId="diag-report"
         action={
-          <Button size="sm" icon={<ClipboardCopy className="size-3.5" />} onClick={() => void copyReport()} data-testid="diag-copy">
+          <Button
+            size="sm"
+            icon={<ClipboardCopy className="size-3.5" />}
+            onClick={() => void copyReport()}
+            data-testid="diag-copy"
+          >
             {t("prefs.diag.copyReport")}
           </Button>
         }
       >
-        <details open={showReport} onToggle={(e) => setShowReport((e.target as HTMLDetailsElement).open)} className="group">
+        <details
+          open={showReport}
+          onToggle={(e) => setShowReport((e.target as HTMLDetailsElement).open)}
+          className="group"
+        >
           <summary className="flex w-fit cursor-pointer select-none list-none items-center gap-1 rounded text-[12.5px] text-ink-2 hover:text-ink focus-visible:focus-ring [&::-webkit-details-marker]:hidden">
-            <ChevronRight className={cn("size-3.5 transition-transform", showReport && "rotate-90")} aria-hidden />
+            <ChevronRight
+              className={cn("size-3.5 transition-transform", showReport && "rotate-90")}
+              aria-hidden
+            />
             report.txt
           </summary>
           {showReport && (
-            <pre className="mt-3 max-h-72 overflow-auto rounded-lg border border-line bg-canvas p-3 font-mono text-[11.5px] leading-relaxed text-ink-2" data-testid="diag-report-text">
+            <pre
+              className="mt-3 max-h-72 overflow-auto rounded-lg border border-line bg-canvas p-3 font-mono text-[11.5px] leading-relaxed text-ink-2"
+              data-testid="diag-report-text"
+            >
               {buildReport(snapshot())}
             </pre>
           )}
         </details>
       </Card>
+      <BackupCard />
     </>
   );
 }
@@ -251,14 +332,30 @@ function ErrorsCard() {
       ) : (
         <ol className="flex flex-col">
           {list.map((e, i) => (
-            <li key={`${e.at}-${i}`} className="flex gap-3 border-t border-line py-3 first:border-t-0 first:pt-0 last:pb-0" data-testid="diag-error" data-code={e.code}>
-              <span className="mt-1.5 size-2 shrink-0 rounded-full bg-[var(--ds-warning)]" aria-hidden />
+            <li
+              key={`${e.at}-${i}`}
+              className="flex gap-3 border-t border-line py-3 first:border-t-0 first:pt-0 last:pb-0"
+              data-testid="diag-error"
+              data-code={e.code}
+            >
+              <span
+                className="mt-1.5 size-2 shrink-0 rounded-full bg-[var(--ds-warning)]"
+                aria-hidden
+              />
               <div className="min-w-0 flex-1">
                 <p className="text-[14px] leading-snug text-ink">{explain(e.code)}</p>
                 <p className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[12px] text-ink-2">
-                  <time dateTime={new Date(e.at).toISOString()}>{formatDateTime(new Date(e.at).toISOString())}</time>
-                  <code className="rounded bg-ink/[0.06] px-1.5 py-px font-mono text-[11px] text-ink-2">{e.code}</code>
-                  {e.docId && <span className="truncate font-mono text-[11px]">{t("prefs.diag.doc", { id: e.docId.slice(0, 8) })}</span>}
+                  <time dateTime={new Date(e.at).toISOString()}>
+                    {formatDateTime(new Date(e.at).toISOString())}
+                  </time>
+                  <code className="rounded bg-ink/[0.06] px-1.5 py-px font-mono text-[11px] text-ink-2">
+                    {e.code}
+                  </code>
+                  {e.docId && (
+                    <span className="truncate font-mono text-[11px]">
+                      {t("prefs.diag.doc", { id: e.docId.slice(0, 8) })}
+                    </span>
+                  )}
                 </p>
               </div>
             </li>
@@ -273,7 +370,8 @@ function ErrorsCard() {
 function useExplain() {
   const { t, i18n } = useTranslation();
   return (code: string) => {
-    if (code.startsWith("client_") && code !== "client_rejection") return t("prefs.diag.err.client", { name: code.slice(7) });
+    if (code.startsWith("client_") && code !== "client_rejection")
+      return t("prefs.diag.err.client", { name: code.slice(7) });
     const key = `prefs.diag.err.${code}`;
     return i18n.exists(key) ? t(key) : t("prefs.diag.err.other", { code });
   };
@@ -296,14 +394,30 @@ function Tile({
   testId: string;
   state?: string;
 }) {
-  const dot = { ok: "bg-success", busy: "bg-[var(--ds-accent)]", warn: "bg-warning", bad: "bg-danger", muted: "bg-ink-3" }[tone];
+  const dot = {
+    ok: "bg-success",
+    busy: "bg-[var(--ds-accent)]",
+    warn: "bg-warning",
+    bad: "bg-danger",
+    muted: "bg-ink-3",
+  }[tone];
   return (
-    <div className="flex gap-3 rounded-lg border border-line bg-canvas/60 p-3.5" data-testid={testId} data-tone={tone} data-state={state}>
-      <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-surface text-ink-2 shadow-[0_0_0_0.5px_var(--ds-line-separator)] [&>svg]:size-4" aria-hidden>
+    <div
+      className="flex gap-3 rounded-lg border border-line bg-canvas/60 p-3.5"
+      data-testid={testId}
+      data-tone={tone}
+      data-state={state}
+    >
+      <span
+        className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-surface text-ink-2 shadow-[0_0_0_0.5px_var(--ds-line-separator)] [&>svg]:size-4"
+        aria-hidden
+      >
         {icon}
       </span>
       <div className="min-w-0 flex-1">
-        <div className="text-[12px] font-medium uppercase tracking-[0.04em] text-ink-2">{label}</div>
+        <div className="text-[12px] font-medium uppercase tracking-[0.04em] text-ink-2">
+          {label}
+        </div>
         <div className="mt-0.5 flex items-center gap-1.5 text-[14.5px] font-medium text-ink">
           <span className={cn("size-1.5 shrink-0 rounded-full", dot)} aria-hidden />
           <span className="min-w-0 truncate">{value}</span>

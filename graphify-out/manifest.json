@@ -1782,10 +1782,10 @@
     "semantic_hash": "69e696284cc7f399b4b89a2aa135e736"
   },
   "apps/web/e2e/mock-server/server.mjs": {
-    "mtime": 1794216092.6849818,
-    "seen": 1794386609.843918,
-    "ast_hash": "ecba9f04d82e31917d92103eb7ec72fd",
-    "semantic_hash": "ecba9f04d82e31917d92103eb7ec72fd"
+    "mtime": 1794425676.3485339,
+    "seen": 1794426072.3968396,
+    "ast_hash": "eaf8f955b51f725ea4da15ee19fbc1fd",
+    "semantic_hash": ""
   },
   "apps/web/e2e/specs/a11y.spec.ts": {
     "mtime": 1793746625.635178,
@@ -4716,10 +4716,10 @@
     "semantic_hash": "3ca293a06fdca401e34aa7d740ea5fc5"
   },
   "docs/spec/06-data-server.md": {
-    "mtime": 1794215107.8945136,
-    "seen": 1794386609.8450906,
-    "ast_hash": "410e4cc6b803e6dd9c28bb4d8bb15c83",
-    "semantic_hash": "410e4cc6b803e6dd9c28bb4d8bb15c83"
+    "mtime": 1794425829.1213772,
+    "seen": 1794426072.415371,
+    "ast_hash": "e800fc86970d1344a2c7f40555ccc389",
+    "semantic_hash": ""
   },
   "docs/spec/07-encryption.md": {
     "mtime": 1793121854.1591642,
@@ -6444,10 +6444,10 @@
     "semantic_hash": "dcc202b2acf217d0c0626ba295aa3cdf"
   },
   "apps/web/src/features/settings/DiagnosticsSection.tsx": {
-    "mtime": 1794147578.914297,
-    "seen": 1794386609.8442025,
-    "ast_hash": "e91a53ecdbd9440f9a671c30951994d9",
-    "semantic_hash": "e91a53ecdbd9440f9a671c30951994d9"
+    "mtime": 1794425681.4039588,
+    "seen": 1794426072.4010618,
+    "ast_hash": "ed18d8915320f1191bac2f0347a20457",
+    "semantic_hash": ""
   },
   "apps/web/src/features/settings/diagnostics.test.ts": {
     "mtime": 1794147578.9182973,
@@ -6486,16 +6486,16 @@
     "semantic_hash": "2f6ecb953966f0e244ff7c629162f5cf"
   },
   "apps/web/src/i18n/prefs.en.ts": {
-    "mtime": 1794168632.7920606,
-    "seen": 1794386609.8442855,
-    "ast_hash": "0e7b4df9d07f81a8dfbe98898e72ae6a",
-    "semantic_hash": "0e7b4df9d07f81a8dfbe98898e72ae6a"
+    "mtime": 1794425710.1724184,
+    "seen": 1794426072.4024093,
+    "ast_hash": "91b0b1d974be2385848a44e20be7127e",
+    "semantic_hash": ""
   },
   "apps/web/src/i18n/prefs.ru.ts": {
-    "mtime": 1794168632.7912111,
-    "seen": 1794386609.8442872,
-    "ast_hash": "d6507164e65d8fd1d334b4ad49b6dbe5",
-    "semantic_hash": "d6507164e65d8fd1d334b4ad49b6dbe5"
+    "mtime": 1794425676.347185,
+    "seen": 1794426072.4024115,
+    "ast_hash": "a15300270e29640ff0ca1027dca7781f",
+    "semantic_hash": ""
   },
   "apps/web/src/lib/growingDelay.ts": {
     "mtime": 1794141274.315751,
@@ -6868,5 +6868,17 @@
     "seen": 1794386609.8446946,
     "ast_hash": "f0c16bc5630c77bccdbf2b9224df79c6",
     "semantic_hash": "f0c16bc5630c77bccdbf2b9224df79c6"
+  },
+  "apps/web/e2e/specs/backup.spec.ts": {
+    "mtime": 1794425729.7399616,
+    "seen": 1794426072.3969197,
+    "ast_hash": "31f43d94c1825b63e3ca723417443d1b",
+    "semantic_hash": ""
+  },
+  "apps/web/src/features/settings/BackupCard.tsx": {
+    "mtime": 1794425887.843971,
+    "seen": 1794426072.4010582,
+    "ast_hash": "90695fcab4f6dad813731f0092e7c426",
+    "semantic_hash": ""
   }
 }

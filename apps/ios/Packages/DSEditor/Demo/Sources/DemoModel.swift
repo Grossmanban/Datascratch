@@ -58,10 +58,11 @@ final class DemoModel {
         if args.contains("-dictationPlaceholder") {
             // A recording being recognised at the end of the first paragraph, then failing
             // (EditorDemoUITests.testDictationPlaceholderInTheText).
-            // As the app after a retry: the recognised text takes the placeholder's place.
+            // The tap reaches the host: the demo discards the recording (inserting text in the demo
+            // under UI tests hits its known typing crash; the replacement has unit tests).
             editor.onDictationPlaceholderTap = { [weak self] id in
                 self?.status = "Повторить запись \(id)"
-                self?.editor.replaceDictationPlaceholder(id: id, markdown: " распознано повторно")
+                self?.editor.removeDictationPlaceholder(id: id)
             }
             DispatchQueue.main.asyncAfter(deadline: .now() + 1) { [weak self] in
                 guard let self, let p = doc.blocks.first(where: { $0.type == NodeType.paragraph }) else { return }

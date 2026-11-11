@@ -1,5 +1,6 @@
-// Client side of the sync protocol (sync-protocol.md v1) for browsers and Node.
-// Responsibilities: authenticate, subscribe documents from their last seq,
+// Client side of the sync protocol (sync-protocol.md v1–3) for browsers and Node.
+// Responsibilities: authenticate, subscribe documents from their last seq (or, on protocol 3,
+// resume from the account cursor and subscribe only what changed),
 // encrypt local Yjs updates into a persistent outbox and resend until `ack`,
 // decrypt and apply remote updates, reconnect with backoff, and upload
 // compaction snapshots when the thresholds of §5 are exceeded.
@@ -14,6 +15,7 @@ import {
   parseServerFrame,
   SYNC_PROTOCOL_LATEST,
   SYNC_PROTOCOL_MIN,
+  SYNC_PROTOCOL_RESUME,
   type AccountChange,
   type ClientMessage,
   type ClientPlatform,
@@ -40,6 +42,7 @@ import {
   EMPTY_DOC_STATE,
   type DocSyncState,
   type OutboxItem,
+  type ResumeState,
   type SyncStorage,
 } from "./storage.js";
 
@@ -138,6 +141,11 @@ export interface SyncClientOptions {
    * decrypts again, so real corruption is still skipped.
    */
   keyMaybeStale?: (docId: string) => boolean | Promise<boolean>;
+  /**
+   * Protocol 3: how long to wait for `resumed` before subscribing every document as in
+   * version 1 (a server that says 3 but does not answer). Default 20 s.
+   */
+  resumeTimeoutMs?: number;
   /** Consecutive auth failures before giving up (status "unauthorized"). Default 3. */
   maxAuthFailures?: number;
   random?: () => number;
@@ -301,6 +309,23 @@ export class SyncClient {
   /** Doc states changed since the last batch write. */
   private readonly dirty = new Set<string>();
   private stateTimer: ReturnType<typeof setTimeout> | null = null;
+  /** Kind of the auth of the current connection (resume is for users only). */
+  private authKind: SyncAuth["kind"] | null = null;
+  /** Stored account cursor (protocol 3); undefined until loaded. */
+  private resumeState: ResumeState | null | undefined = undefined;
+  /** `resume` sent on this connection, `resumed` not received yet. */
+  private resumeTimer: ReturnType<typeof setTimeout> | null = null;
+  private resumeWaiting = false;
+  /**
+   * The cursor of this connection (from `resumed`): stored once every document subscribed for
+   * it is caught up (`outstanding` empty), never before — a cursor must not cover a gap.
+   */
+  private session: {
+    cursor: string;
+    epoch: string;
+    outstanding: Set<string>;
+    committed: boolean;
+  } | null = null;
 
   constructor(options: SyncClientOptions) {
     this.opts = {
@@ -310,6 +335,7 @@ export class SyncClient {
       storageRetryMs: 5_000,
       stateFlushMs: 200,
       maxAuthFailures: 3,
+      resumeTimeoutMs: 20_000,
       random: Math.random,
       ...options,
     };
@@ -500,7 +526,8 @@ export class SyncClient {
       this.docs.set(docId, entry);
       if (doc) this.attach(docId, entry, doc);
     }
-    if (this.welcomed && list.length > 0) {
+    // While `resume` is pending, its answer subscribes what is needed (and then the outbox goes).
+    if (this.welcomed && list.length > 0 && !this.resumeWaiting) {
       // Subscribe before pushing (sync-protocol.md §3), then send what was queued for these docs.
       this.sendSubscribe(
         ids.map((docId) => ({ docId, since: this.docs.get(docId)!.state.lastSeq })),
@@ -531,6 +558,8 @@ export class SyncClient {
     await this.flushStates();
     entry.detach();
     this.docs.delete(docId);
+    this.session?.outstanding.delete(docId);
+    await this.serial(() => this.maybeCommitResume());
     if (this.welcomed) this.send({ type: "unsubscribe", docIds: [docId] });
   }
 
@@ -724,7 +753,13 @@ export class SyncClient {
         return;
       }
       const msg = frame.message;
-      void this.serial(() => this.handle(msg));
+      void this.serial(async () => {
+        try {
+          await this.handle(msg);
+        } finally {
+          await this.maybeCommitResume();
+        }
+      });
     };
     socket.onclose = (ev) => {
       if (socket !== this.socket) return;
@@ -735,6 +770,7 @@ export class SyncClient {
       }
       this.socket = null;
       this.welcomed = false;
+      this.endResume();
       if (this.stableTimer) clearTimeout(this.stableTimer);
       this.stableTimer = null;
       for (const entry of this.docs.values()) {
@@ -766,6 +802,7 @@ export class SyncClient {
       return;
     }
     if (socket !== this.socket) return;
+    this.authKind = auth.kind;
     this.send({
       type: "hello",
       protocol: this.helloProtocol,
@@ -900,10 +937,10 @@ export class SyncClient {
     }, this.opts.stateFlushMs);
   }
 
-  private async flushStates(): Promise<void> {
+  private async flushStates(): Promise<boolean> {
     if (this.stateTimer) clearTimeout(this.stateTimer);
     this.stateTimer = null;
-    if (this.dirty.size === 0) return;
+    if (this.dirty.size === 0) return true;
     const entries: [string, DocSyncState][] = [];
     for (const id of this.dirty) {
       const entry = this.docs.get(id);
@@ -914,6 +951,7 @@ export class SyncClient {
     try {
       if (storage.setDocStates) await storage.setDocStates(entries);
       else for (const [id, state] of entries) await storage.setDocState(id, state);
+      return true;
     } catch (e) {
       // Keep the cursors dirty and retry; a lost cursor write only means re-fetching.
       for (const [id] of entries) this.dirty.add(id);
@@ -922,6 +960,154 @@ export class SyncClient {
         this.stateTimer = null;
         void this.flushStates();
       }, this.opts.storageRetryMs);
+      return false;
+    }
+  }
+
+  // -------------------------------------------------------------------------
+  // Protocol 3: resume from the account cursor (sync-protocol.md §3.1)
+  // -------------------------------------------------------------------------
+
+  private async canResume(): Promise<boolean> {
+    const storage = this.opts.storage;
+    if ((this._protocol ?? 0) < SYNC_PROTOCOL_RESUME || this.authKind !== "user") return false;
+    if (!storage.getResumeState || !storage.setResumeState) return false;
+    if (this.resumeState === undefined) {
+      try {
+        this.resumeState = await storage.getResumeState();
+      } catch (e) {
+        this.emitError({ code: "storage_failed", message: String(e) });
+        return false;
+      }
+    }
+    return true;
+  }
+
+  private endResume(): void {
+    if (this.resumeTimer) clearTimeout(this.resumeTimer);
+    this.resumeTimer = null;
+    this.resumeWaiting = false;
+    this.session = null;
+  }
+
+  /** Version 1 start: every document from its lastSeq, then the outbox. */
+  private async subscribeAll(): Promise<void> {
+    this.sendSubscribe(
+      [...this.docs]
+        .filter(([, e]) => !e.paused)
+        .map(([docId, e]) => ({ docId, since: e.state.lastSeq })),
+    );
+    for (const item of (await this.outboxItems()).values()) this.sendItem(item);
+  }
+
+  private async handleResumed(msg: Extract<ServerMessage, { type: "resumed" }>): Promise<void> {
+    if (!this.resumeWaiting) return;
+    if (this.resumeTimer) clearTimeout(this.resumeTimer);
+    this.resumeTimer = null;
+    this.resumeWaiting = false;
+    const prev = this.resumeState;
+    if (msg.reset || !prev) {
+      // Unknown or old cursor: everything as in version 1, under a new epoch (old coverage void).
+      const outstanding = new Set([...this.docs].filter(([, e]) => !e.paused).map(([id]) => id));
+      this.session = { cursor: msg.cursor, epoch: uuidv7(), outstanding, committed: false };
+      await this.subscribeAll();
+      return;
+    }
+    const epoch = prev.epoch;
+    const listed = new Map(msg.docs.map((d) => [d.docId, d.seq]));
+    const removed = new Set(msg.removed);
+    const toSubscribe: { docId: string; since: number }[] = [];
+    const caughtUp: string[] = [];
+    for (const [docId, entry] of this.docs) {
+      if (entry.paused || removed.has(docId)) continue;
+      const head = listed.get(docId);
+      const behind =
+        head !== undefined ? entry.state.lastSeq < head : entry.state.covered !== epoch;
+      if (behind) toSubscribe.push({ docId, since: entry.state.lastSeq });
+      else caughtUp.push(docId);
+    }
+    // Listed or removed documents this client does not sync now lose their coverage; if that
+    // cannot be stored, this connection keeps the old cursor (a covered flag would hide a change).
+    const uncovered = await this.uncover(
+      [...listed.keys(), ...removed].filter((id) => !this.docs.has(id)),
+      epoch,
+    );
+    this.session = uncovered
+      ? {
+          cursor: msg.cursor,
+          epoch,
+          outstanding: new Set(toSubscribe.map((d) => d.docId)),
+          committed: false,
+        }
+      : null;
+    for (const docId of removed) {
+      if (this.docs.has(docId)) {
+        this.emitError({ code: "doc_not_found", message: "removed", docId, ref: docId });
+      }
+    }
+    for (const docId of caughtUp) {
+      const entry = this.docs.get(docId)!;
+      if (entry.synced) continue;
+      entry.synced = true;
+      for (const fn of this.listeners.synced) fn(docId);
+    }
+    this.sendSubscribe(toSubscribe);
+    for (const item of (await this.outboxItems()).values()) this.sendItem(item);
+  }
+
+  /** Clear `covered` of stored documents not synced by this client (their state may lag). */
+  private async uncover(docIds: string[], epoch: string): Promise<boolean> {
+    if (docIds.length === 0) return true;
+    const storage = this.opts.storage;
+    try {
+      const states = storage.getDocStates
+        ? await storage.getDocStates(docIds)
+        : new Map(
+            (
+              await Promise.all(
+                docIds.map(async (id) => [id, await storage.getDocState(id)] as const),
+              )
+            ).filter((e): e is readonly [string, DocSyncState] => e[1] !== null),
+          );
+      const entries: [string, DocSyncState][] = [];
+      for (const [id, state] of states) {
+        if (state.covered === epoch) entries.push([id, { ...state, covered: null }]);
+      }
+      if (entries.length === 0) return true;
+      if (storage.setDocStates) await storage.setDocStates(entries);
+      else for (const [id, state] of entries) await storage.setDocState(id, state);
+      return true;
+    } catch (e) {
+      this.emitError({ code: "storage_failed", message: String(e) });
+      return false;
+    }
+  }
+
+  /**
+   * Store the connection's cursor once every document it waited for is caught up: first the
+   * documents' coverage (synced → covered by this epoch, not synced → not), then the cursor.
+   */
+  private async maybeCommitResume(): Promise<void> {
+    const s = this.session;
+    if (!s || s.committed || s.outstanding.size > 0 || !this.welcomed) return;
+    s.committed = true;
+    for (const [docId, entry] of this.docs) {
+      const covered = entry.synced && !entry.paused ? s.epoch : null;
+      if ((entry.state.covered ?? null) !== covered) {
+        entry.state.covered = covered;
+        this.markDirty(docId);
+      }
+    }
+    const state: ResumeState = { cursor: s.cursor, epoch: s.epoch };
+    if (!(await this.flushStates()) || this.session !== s) {
+      s.committed = false;
+      return;
+    }
+    try {
+      await this.opts.storage.setResumeState!(state);
+      this.resumeState = state;
+    } catch (e) {
+      this.emitError({ code: "storage_failed", message: String(e) });
     }
   }
 
@@ -950,10 +1136,27 @@ export class SyncClient {
           this.attempt = 0;
           this.rateLimits = 0;
         }, this.opts.stableAfterMs);
-        this.sendSubscribe([...this.docs].map(([docId, e]) => ({ docId, since: e.state.lastSeq })));
-        for (const item of (await this.outboxItems()).values()) this.sendItem(item);
+        this.endResume();
+        if (await this.canResume()) {
+          // Protocol 3: ask what changed since the stored cursor instead of subscribing everything.
+          this.resumeWaiting = true;
+          this.resumeTimer = setTimeout(() => {
+            this.resumeTimer = null;
+            void this.serial(async () => {
+              if (!this.resumeWaiting) return;
+              this.resumeWaiting = false;
+              await this.subscribeAll();
+            });
+          }, this.opts.resumeTimeoutMs);
+          this.send({ type: "resume", cursor: this.resumeState?.cursor ?? null });
+          return;
+        }
+        await this.subscribeAll();
         return;
       }
+      case "resumed":
+        await this.handleResumed(msg);
+        return;
       case "updates": {
         const entry = this.docs.get(msg.docId);
         // Paused documents ignore the stream; it is re-read from lastSeq on resume.
@@ -996,6 +1199,11 @@ export class SyncClient {
         this.markDirty(msg.docId);
         if (msg.upToDate && !entry.synced) {
           entry.synced = true;
+          this.session?.outstanding.delete(msg.docId);
+          if (this.session?.committed && entry.state.covered !== this.session.epoch) {
+            // Caught up after the cursor was stored: covered by it from now on.
+            entry.state.covered = this.session.epoch;
+          }
           for (const fn of this.listeners.synced) fn(msg.docId);
         }
         const skippedNow = (this.skippedLog.get(msg.docId)?.length ?? 0) > skippedBefore;
@@ -1024,7 +1232,10 @@ export class SyncClient {
         const size = await this.applyRemote(msg.docId, entry, msg.payload, ref);
         if (size === PAUSED) return;
         this.count(entry, size);
-        entry.state.lastSeq = Math.max(entry.state.lastSeq, msg.seq);
+        // A live update may come before the catch-up of a document (protocol 3 account
+        // subscription): applying it is harmless, but the cursor waits for the catch-up — it
+        // must not jump over updates still on their way.
+        if (entry.synced) entry.state.lastSeq = Math.max(entry.state.lastSeq, msg.seq);
         await this.flushStored(msg.docId, entry);
         this.markDirty(msg.docId);
         await this.maybeSnapshot(msg.docId, entry);
@@ -1079,6 +1290,12 @@ export class SyncClient {
           this.socket?.close(1000, "protocol fallback");
           return;
         }
+        if (this.resumeWaiting && msg.code === "bad_request" && !msg.ref) {
+          // The server refused `resume`: start as in version 1, without a cursor (not an error).
+          this.endResume();
+          await this.subscribeAll();
+          return;
+        }
         await this.handleError(msg.code, msg.message, msg.ref, msg.retryAfterMs);
         return;
     }
@@ -1093,6 +1310,9 @@ export class SyncClient {
     const item = ref ? (await this.outboxItems()).get(ref) : undefined;
     const docId = item?.docId ?? (ref && this.docs.has(ref) ? ref : undefined);
     this.emitError({ code, message, ...(ref ? { ref } : {}), ...(docId ? { docId } : {}) });
+    if (docId && (code === "doc_not_found" || code === "forbidden") && !item) {
+      this.session?.outstanding.delete(docId);
+    }
     switch (code) {
       case "unauthorized":
         this.authFailures++;
@@ -1214,6 +1434,8 @@ export class SyncClient {
       }
     }, this.opts.missingKeyReportMs);
     entry.paused = { since: Date.now(), timer };
+    // A paused document does not hold the cursor back; it is not covered by it (below).
+    this.session?.outstanding.delete(docId);
     for (const fn of this.listeners.keyMissing) fn(docId);
   }
 

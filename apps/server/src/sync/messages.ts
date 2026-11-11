@@ -31,7 +31,12 @@ export type ServerMessage =
 export const PROTOCOL_VERSION = SYNC_PROTOCOL_VERSION;
 /** Versions accepted in `hello` (sync-protocol.md §2); v2 adds `account_changed`. */
 export const PROTOCOL_MIN = SYNC_PROTOCOL_MIN;
-export const PROTOCOL_LATEST = SYNC_PROTOCOL_LATEST;
+/**
+ * Newest version this server speaks. Version 3 (`resume`, sync-protocol.md §3.1) is not
+ * implemented here yet, so the server stays at 2 even though the shared clients know 3;
+ * raise it to SYNC_PROTOCOL_LATEST together with `resume`.
+ */
+export const PROTOCOL_LATEST: number = Math.min(SYNC_PROTOCOL_LATEST, 2);
 /** The first version that receives `account_changed` (sync-protocol.md §6). */
 export const ACCOUNT_CHANGED_SINCE = 2;
 

@@ -157,6 +157,10 @@ public actor SyncClient {
     private var notBefore: ContinuousClock.Instant?
     /// Connection attempts that failed in a row (0 once connected).
     public private(set) var consecutiveFailures = 0
+    /// Connections that reached `welcome` since the client was made (Diagnostics).
+    public private(set) var connectionsOpened = 0
+    /// Last frame received on the current connection: proof of life when a pong is late.
+    private var lastFrameAt: ContinuousClock.Instant?
     /// Version said in the next `hello` (§2): the newest, lowered once per `protocol_mismatch`.
     private var helloVersion = SyncProtocol.latest
     /// Version of the current (last) connection, from `welcome`; `account_changed` needs 2.
@@ -340,12 +344,18 @@ public actor SyncClient {
         }
 
         let (interval, pongTimeout) = (configuration.pingInterval, configuration.pongTimeout)
+        connectionsOpened += 1
+        lastFrameAt = .now
         let pinger = Task { [conn] in
             while !Task.isCancelled {
                 try? await Task.sleep(for: interval)
                 if Task.isCancelled { break }
-                // A dead connection: closing it makes `receive` throw, and we reconnect.
+                // A dead connection: closing it makes `receive` throw, and we reconnect. A late
+                // pong while frames keep coming is not one: on a slow link the pong waits behind
+                // catch-up data, and replacing a working connection started the next full
+                // resubscribe — which delayed the next pong (owner, build 46, 4G).
                 if await !Self.ping(conn, timeout: pongTimeout) {
+                    if let last = self.lastFrameAt, ContinuousClock.now - last < interval + pongTimeout { continue }
                     if !Task.isCancelled { conn.close() }
                     break
                 }
@@ -355,6 +365,7 @@ public actor SyncClient {
 
         while !Task.isCancelled {
             let text = try await receive(conn)
+            lastFrameAt = .now
             guard let message = SyncFrame.decode(text) else { continue }
             if case .error(.deviceRevoked, _, _, _, let reason) = message { throw SyncClientError.deviceRevoked(reason ?? .user) }
             if case .error(let code, _, nil, let retryAfterMs, _) = message { rateLimited(code, retryAfterMs) }

@@ -33,6 +33,8 @@ const ConfigSchema = z
     DB_STATEMENT_TIMEOUT_MS: z.coerce.number().int().nonnegative().default(120_000),
     DB_LOCK_TIMEOUT_MS: z.coerce.number().int().nonnegative().default(30_000),
     DB_IDLE_IN_TRANSACTION_TIMEOUT_MS: z.coerce.number().int().nonnegative().default(120_000),
+    /** Waiting for a pool connection (ms, 0: forever). */
+    DB_CONNECT_TIMEOUT_MS: z.coerce.number().int().nonnegative().default(15_000),
     /** Run migrations automatically on startup. */
     DB_MIGRATE_ON_START: bool.default(true),
 

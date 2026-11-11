@@ -16,6 +16,11 @@ const own = (b: Uint8Array) => Buffer.from(b).toString('base64url');
 // server (audit 2026-11-02). Past the queue limit requests are turned away at once.
 const PARALLEL = 4;
 const MAX_WAITING = 200;
+/**
+ * A hash (waiting for a slot included) that takes longer fails the request with 429 (retry shortly, as when the queue is full) instead of
+ * keeping it open forever; its slot stays taken until the hash itself ends.
+ */
+export const HASH_TIMEOUT_MS = 20_000;
 let running = 0;
 const waiting: (() => void)[] = [];
 
@@ -38,11 +43,29 @@ export function hashQueue(): { running: number; waiting: number } {
   return { running, waiting: waiting.length };
 }
 
-export const hashSecret = (secret: Uint8Array): Promise<string> => limited(() => hash(own(secret), OPTIONS));
+let onHashTimeout: (state: { running: number; waiting: number }) => void = () => {};
+/** Where a hash timeout is reported (the server's log, set in app.ts). */
+export function reportHashTimeouts(fn: typeof onHashTimeout): void {
+  onHashTimeout = fn;
+}
+
+function withTimeout<T>(p: Promise<T>): Promise<T> {
+  let timer: NodeJS.Timeout | undefined;
+  const late = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => {
+      onHashTimeout(hashQueue());
+      reject(new ApiError('rate_limited', 'server busy, retry shortly', undefined, 5_000));
+    }, HASH_TIMEOUT_MS);
+  });
+  p.catch(() => undefined);
+  return Promise.race([p, late]).finally(() => clearTimeout(timer));
+}
+
+export const hashSecret = (secret: Uint8Array): Promise<string> => withTimeout(limited(() => hash(own(secret), OPTIONS)));
 
 export async function verifySecret(phc: string, secret: Uint8Array): Promise<boolean> {
   try {
-    return await limited(() => verify(phc, own(secret)));
+    return await withTimeout(limited(() => verify(phc, own(secret))));
   } catch (e) {
     if (e instanceof ApiError) throw e;
     return false;

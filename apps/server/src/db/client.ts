@@ -24,9 +24,16 @@ export interface DbTimeouts {
   statementMs: number;
   lockMs: number;
   idleInTransactionMs: number;
+  /** Waiting for a pool connection, a new one included (pg waits forever by default). */
+  connectMs?: number;
 }
 
-export const DEFAULT_DB_TIMEOUTS: DbTimeouts = { statementMs: 120_000, lockMs: 30_000, idleInTransactionMs: 120_000 };
+export const DEFAULT_DB_TIMEOUTS: DbTimeouts = {
+  statementMs: 120_000,
+  lockMs: 30_000,
+  idleInTransactionMs: 120_000,
+  connectMs: 15_000,
+};
 
 export function createDatabase(url: string, max = 10, timeouts: DbTimeouts = DEFAULT_DB_TIMEOUTS): Database {
   const options = [
@@ -34,7 +41,14 @@ export function createDatabase(url: string, max = 10, timeouts: DbTimeouts = DEF
     `-c lock_timeout=${timeouts.lockMs}`,
     `-c idle_in_transaction_session_timeout=${timeouts.idleInTransactionMs}`,
   ].join(' ');
-  const pool = new pg.Pool({ connectionString: url, max, options });
+  const pool = new pg.Pool({
+    connectionString: url,
+    max,
+    options,
+    connectionTimeoutMillis: timeouts.connectMs ?? DEFAULT_DB_TIMEOUTS.connectMs!,
+    // Idle connections stay alive through quiet periods instead of being dropped by the network.
+    keepAlive: true,
+  });
   const db = drizzle(pool, { schema });
   return { pool, db, close: () => pool.end() };
 }

@@ -1,3 +1,4 @@
+#if canImport(UIKit)
 import UIKit
 import DSEditorModel
 
@@ -192,6 +193,15 @@ extension EditorView {
         }
     }
 
+    /// The caret's x at a flat offset; at the very end of the text the layout has no fragment
+    /// there, so the text view's caret is used.
+    func dictationCaretX(at offset: Int) -> CGFloat? {
+        if let x = geometry.caretX(at: offset) { return x }
+        guard let pos = textView.position(from: textView.beginningOfDocument, offset: offset) else { return nil }
+        let r = textView.caretRect(for: pos)
+        return r.isNull || r.isInfinite ? nil : r.minX
+    }
+
     /// Each chip at its place: just after the caret position on its line, or at the start of the
     /// next line when the line has no room for it. Hidden while its paragraph is gone.
     func layoutDictationPlaceholders() {
@@ -211,7 +221,7 @@ extension EditorView {
             view.isHidden = false
             let size = view.sizeThatFits(.zero)
             let lineHeight = min(line.height, theme.bodyFont.lineHeight * 1.6)
-            var x = (geometry.caretX(at: at) ?? line.minX) + DictationPlaceholderView.gap
+            var x = (dictationCaretX(at: at) ?? line.minX) + DictationPlaceholderView.gap
             var y = line.minY + (lineHeight - size.height) / 2
             if x + size.width > right {
                 x = left
@@ -222,3 +232,4 @@ extension EditorView {
         }
     }
 }
+#endif

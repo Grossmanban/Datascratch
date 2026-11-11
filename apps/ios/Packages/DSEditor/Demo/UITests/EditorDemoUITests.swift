@@ -53,7 +53,7 @@ final class EditorDemoUITests: XCTestCase {
         XCTAssertEqual(chip.label, "Распознаю… 0:42")
         let failed = NSPredicate(format: "label == %@", "Запись не распознана")
         expectation(for: failed, evaluatedWith: chip)
-        waitForExpectations(timeout: 10)
+        waitForExpectations(timeout: 20)
         chip.tap()
         XCTAssertTrue(app.staticTexts["Повторить запись demo"].waitForExistence(timeout: 5), "the tap reaches the host")
         XCTAssertEqual(app.state, .runningForeground)

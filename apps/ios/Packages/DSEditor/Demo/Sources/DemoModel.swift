@@ -63,7 +63,7 @@ final class DemoModel {
                 guard let self, let p = doc.blocks.first(where: { $0.type == NodeType.paragraph }) else { return }
                 self.editor.insertDictationPlaceholder(id: "demo", at: DictationAnchor.at(TextPosition(block: p.id, offset: .max), in: doc),
                                                        state: .recognising(seconds: 42))
-                DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 12) {
                     self.editor.updateDictationPlaceholder(id: "demo", state: .failed(code: "asr_failed"))
                 }
             }

@@ -1171,7 +1171,7 @@ final class EditorViewTests: XCTestCase {
         XCTAssertEqual(doc.blocks, before, "not in the document")
         XCTAssertFalse(doc.canUndo)
         let x0 = chip.frame.minX
-        let caret = try XCTUnwrap(editor.geometry.caretX(at: end))
+        let caret = try XCTUnwrap(editor.dictationCaretX(at: end))
         XCTAssertEqual(x0, caret + DictationPlaceholderView.gap, accuracy: 1, "just after the place")
         // Text typed before it moves it; the host's anchor stays good.
         doc.transact { doc.insertText("Срочно: ", marks: .empty, block: doc.blocks[1].id, at: 0) }

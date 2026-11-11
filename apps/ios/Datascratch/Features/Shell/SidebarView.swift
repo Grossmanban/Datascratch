@@ -147,31 +147,45 @@ struct SidebarView: View {
     }
 
     @ViewBuilder private var starredSection: some View {
-        if !library.starredNotes.isEmpty {
-            let starred: (rows: [NoteMeta], hidden: Int) = SidebarLimit.visible(library.starredNotes, showAll: showingAll.contains("starred"))
+        let items = library.starredItems
+        if !items.isEmpty {
+            let starred: (rows: [StarredItem], hidden: Int) = SidebarLimit.visible(items, showAll: showingAll.contains("starred"))
             Section {
                 if !isCollapsed("starred") {
-                    ForEach(starred.rows) { note in
+                    // Notes, folders and notebooks, in the order they were starred (as on the web).
+                    ForEach(starred.rows) { item in
                         Button {
-                            scene.open(note.id)
+                            switch item {
+                            case .note(let note): scene.open(note.id)
+                            case .folder(let folder): scene.show(.folder(folder.id))
+                            case .notebook(let notebook): scene.show(.notebook(notebook.id))
+                            }
                         } label: {
-                            NoteTitleLabel(note: note)
+                            StarredItemLabel(item: item)
                         }
                         .buttonStyle(.plain)
-                        .accessibilityIdentifier("sidebar.starredNote")
+                        .accessibilityIdentifier(starredIdentifier(item))
                         .contextMenu {
                             Button("Remove from Starred", systemImage: "star.slash") {
-                                library.toggleStar(.note, note.id)
+                                library.toggleStar(item.ref.kind, item.ref.id)
                             }
                         }
                     }
-                    moreRow("starred", hidden: starred.hidden, total: library.starredNotes.count)
+                    moreRow("starred", hidden: starred.hidden, total: items.count)
                 }
             } header: {
                 SidebarSectionHeader(title: "Starred", identifier: "starred", isCollapsed: isCollapsed("starred")) {
                     toggle("starred")
                 }
             }
+        }
+    }
+
+    private func starredIdentifier(_ item: StarredItem) -> String {
+        switch item {
+        case .note: "sidebar.starredNote"
+        case .folder: "sidebar.starredFolder"
+        case .notebook: "sidebar.starredNotebook"
         }
     }
 
@@ -304,6 +318,42 @@ struct SidebarView: View {
     private func moreRow(_ section: String, hidden: Int, total: Int) -> some View {
         if hidden > 0 || (showingAll.contains(section) && total > SidebarLimit.rows) {
             SidebarMoreRow(hidden: hidden, identifier: section) { toggleShowingAll(section) }
+        }
+    }
+}
+
+/// A starred note, folder (with «Notebook › …» under its name) or notebook.
+struct StarredItemLabel: View {
+    @Environment(AppModel.self) private var app
+    let item: StarredItem
+
+    var body: some View {
+        switch item {
+        case .note(let note):
+            NoteTitleLabel(note: note)
+        case .folder(let folder):
+            Label {
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(folder.name).lineLimit(1)
+                    let path = app.library.path(ofFolder: folder)
+                    if !path.isEmpty {
+                        Text(path)
+                            .font(Theme.Typography.caption)
+                            .foregroundStyle(Theme.Palette.textTertiary)
+                            .lineLimit(1)
+                    }
+                }
+            } icon: {
+                Image(systemName: folder.displaySymbol)
+                    .foregroundStyle(folder.color.foreground)
+            }
+        case .notebook(let notebook):
+            Label {
+                Text(notebook.name).lineLimit(1)
+            } icon: {
+                Image(systemName: notebook.icon)
+                    .foregroundStyle(notebook.color.foreground)
+            }
         }
     }
 }

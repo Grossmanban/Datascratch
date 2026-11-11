@@ -27,7 +27,7 @@ struct DocumentCollectionView: View {
         Group {
             // iPad: the search field lives under the list's title, so a search with no results
             // keeps the header (and the field) on screen.
-            if notes.isEmpty && subfolders.isEmpty && !(Self.searchInList && !scene.searchText.isEmpty) {
+            if notes.isEmpty && subfolders.isEmpty && starredPlaces.isEmpty && !(Self.searchInList && !scene.searchText.isEmpty) {
                 emptyState
             } else if settings.libraryLayout == .grid {
                 ScrollView {
@@ -175,6 +175,8 @@ struct DocumentCollectionView: View {
             if Self.searchInList { ListSearchField(text: Bindable(scene).searchText) }
             // Results come from the whole space: this level's folders would only be in the way.
             if !subfolders.isEmpty, scene.searchText.isEmpty { FolderStrip(folders: subfolders) }
+            // Starred folders and notebooks, above the starred notes, in starring order.
+            if !starredPlaces.isEmpty, scene.searchText.isEmpty { StarredPlacesStrip(items: starredPlaces) }
             #if canImport(DSDesign)
             if isLocked {
                 DSCallout(tone: .info, title: String(localized: "Getting this notebook ready"),
@@ -191,6 +193,12 @@ struct DocumentCollectionView: View {
     /// iPad: search under the list's title, as on the web (owner's feedback 2026-11-01: «why is
     /// document search on the right»); iPhone keeps the system field at the bottom, in thumb reach.
     static var searchInList: Bool { UIDevice.current.userInterfaceIdiom == .pad }
+
+    /// The Starred list: its folders and notebooks.
+    private var starredPlaces: [StarredItem] {
+        guard source == .starred else { return [] }
+        return library.starredItems.filter { if case .note = $0 { false } else { true } }
+    }
 
     /// Folders of the level this list shows (D-15: the folder strip above the documents).
     private var subfolders: [Folder] {
@@ -686,6 +694,54 @@ struct UnreadableNotice: View {
 /// The current level's folders as a strip of cards above the documents (spec/05): icon, name and
 /// document count in the notebook's tint. A tap opens the folder, a long press gives its menu.
 /// Scrolls sideways; on a wide column it wraps.
+/// Starred folders and notebooks in the Starred list: rows in one quiet card, as the folders.
+struct StarredPlacesStrip: View {
+    @Environment(AppModel.self) private var app
+    @Environment(SceneModel.self) private var scene
+    let items: [StarredItem]
+
+    var body: some View {
+        VStack(spacing: 0) {
+            ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
+                Button {
+                    switch item {
+                    case .folder(let folder): scene.show(.folder(folder.id))
+                    case .notebook(let notebook): scene.show(.notebook(notebook.id))
+                    case .note(let note): scene.open(note.id)
+                    }
+                } label: {
+                    HStack(spacing: Theme.Space.s3) {
+                        StarredItemLabel(item: item)
+                            .font(.subheadline.weight(.medium))
+                            .foregroundStyle(Theme.Palette.textPrimary)
+                        Spacer(minLength: Theme.Space.s2)
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundStyle(Theme.Palette.textTertiary)
+                    }
+                    .padding(.horizontal, Theme.Space.s3)
+                    .padding(.vertical, Theme.Space.s2)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier("library.starredPlace")
+                .contextMenu {
+                    Button("Remove from Starred", systemImage: "star.slash") {
+                        app.library.toggleStar(item.ref.kind, item.ref.id)
+                    }
+                }
+                if index < items.count - 1 {
+                    Divider().padding(.leading, 44)
+                }
+            }
+        }
+        .background(Theme.Palette.surface, in: RoundedRectangle(cornerRadius: Theme.Radius.md, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: Theme.Radius.md, style: .continuous).strokeBorder(Theme.Palette.separator))
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("library.starredPlaces")
+    }
+}
+
 struct FolderStrip: View {
     @Environment(AppModel.self) private var app
     @Environment(SceneModel.self) private var scene

@@ -54,6 +54,13 @@ final class NativeEditorModel: ClosingEditor {
             DispatchQueue.main.async { self?.changed() }
         }
         editor.onOpenNote = { [weak app] id in app?.pendingRoute = .note(id) }
+        // D-65: a recording that was not recognised — its card, with «Retry» (a second tap hides it).
+        editor.onDictationPlaceholderTap = { [weak self] id in
+            DispatchQueue.main.async {
+                guard let self else { return }
+                self.tappedDictation = self.tappedDictation == id ? nil : id
+            }
+        }
         // This device's caret goes to the others with its presence state (nil: editing ended).
         editor.onLocalCursorChange = { [weak app] json in
             DispatchQueue.main.async { app?.presence?.setLocalCursor(json, in: noteId) }
@@ -137,6 +144,10 @@ final class NativeEditorModel: ClosingEditor {
     /// D-65: what is being dictated and not in the text yet (grey at the caret; the bar shows
     /// the step).
     var dictationPreview: String?
+    /// D-65: kept recordings' placeholders in this editor's text, by record id.
+    var dictationPlaces: [String: DictationPlaceholderState] = [:]
+    /// The failed placeholder tapped: its card («Retry», «Save Audio», «Delete») shows.
+    var tappedDictation: String?
     /// D-65: this document's microphone.
     @ObservationIgnored lazy var dictation: DictationController = {
         let dictation = DictationController(app: app, target: self)
@@ -377,6 +388,9 @@ struct NativeDocumentScreen: View {
                 .toolbar { NativeEditorToolbar(model: model, note: note) }
                 .modifier(LinkPrompt(model: model))
                 .modifier(DictationSheets(dictation: model.dictation))
+                // D-65: the kept recordings' placeholders in the text follow the inbox.
+                .onChange(of: app.dictationInbox.items, initial: true) { model.syncDictationPlaces(with: app.dictationInbox) }
+                .onChange(of: app.dictationInbox.working) { model.syncDictationPlaces(with: app.dictationInbox) }
                 .coverPickers()
             } else if failed {
                 // Opening the document failed: fall back to the stand-in editor.
@@ -394,6 +408,7 @@ struct NativeDocumentScreen: View {
         }
         .onDisappear {
             model?.dictation.leave()
+            model?.keepDictationPlaces(in: app.dictationInbox)
             app.library.recordVersion(ofNote: noteId)
             // Version history (sync-protocol §5): a snapshot when the note goes off screen.
             app.snapshotOnLeave(noteId: noteId)
@@ -708,7 +723,10 @@ struct EditorBottomBars: View {
                 FormatStatus(formatter: model.formatter) {
                     scene.sheet = .voiceOriginal(noteId: model.noteId)
                 }
-                PendingDictationCards(inbox: app.dictationInbox, noteId: model.noteId)
+                PendingDictationCards(inbox: app.dictationInbox, noteId: model.noteId,
+                                      placed: Set(model.dictationPlaces.keys), tapped: model.tappedDictation) {
+                    model.tappedDictation = nil
+                }
                 DictationPreview(dictation: model.dictation, text: model.dictationPreview)
                 if let message = model.dictation.message { DictationMessage(text: message) }
                 if !app.isVoiceOff {

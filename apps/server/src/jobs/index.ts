@@ -1,3 +1,4 @@
+import { pruneUserDocs } from '../services/resume.js';
 import { and, asc, gt, inArray, isNotNull, isNull, lt, or, sql } from 'drizzle-orm';
 import type { AppContext } from '../context.js';
 import {
@@ -32,6 +33,8 @@ export async function runCleanup(ctx: AppContext): Promise<{ blobs: number }> {
     .delete(attachments)
     .where(and(isNull(attachments.completedAt), lt(attachments.createdAt, new Date(now - STALE_UPLOAD_DAYS * DAY_MS))));
   await db.delete(refreshTokens).where(lt(refreshTokens.expiresAt, new Date(now)));
+  // Resume (sync protocol 3): removed documents are remembered for RESUME_KEEP_DAYS.
+  await pruneUserDocs(db, now);
   await db.delete(oauthCodes).where(lt(oauthCodes.expiresAt, new Date(now)));
   await db.delete(oauthTokens).where(lt(oauthTokens.expiresAt, new Date(now)));
   // Registered or cached clients nobody granted access to (and with no pending code) after a day.

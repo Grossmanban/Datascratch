@@ -71,7 +71,13 @@ const ConfigSchema = z
     FETCH_IMAGE_TIMEOUT_MS: z.coerce.number().int().positive().default(15_000),
     FETCH_IMAGE_CONCURRENCY: z.coerce.number().int().positive().default(4),
     FETCH_IMAGE_CONCURRENCY_PER_USER: z.coerce.number().int().positive().default(2),
-    SYNC_UPDATE_MAX_BYTES: z.coerce.number().int().positive().default(2 * 1024 * 1024),
+    /**
+     * One update (decoded bytes). 16 MiB since 2026-11-11 (sync-protocol §7): a big change goes
+     * as a `push` with its own seq, so catch-up and live delivery need no special case.
+     */
+    SYNC_UPDATE_MAX_BYTES: z.coerce.number().int().positive().default(16 * 1024 * 1024),
+    /** Protocol 3: an account with more readable documents gets `resumed { reset }` (subscribes as in v1). */
+    SYNC_ACCOUNT_SUB_MAX_DOCS: z.coerce.number().int().positive().default(20000),
     SYNC_SNAPSHOT_MAX_BYTES: z.coerce.number().int().positive().default(16 * 1024 * 1024),
     SYNC_AWARENESS_MAX_BYTES: z.coerce.number().int().positive().default(64 * 1024),
     /** Messages per second allowed per WebSocket connection (token bucket, burst = 5x). */

@@ -146,3 +146,31 @@ describe('share expiry on live guest connections', () => {
     expect((await again.waitClose()).code).toBe(4401);
   }, 15_000);
 });
+
+describe('update size (sync-protocol §7, 2026-11-11)', () => {
+  it('accepts an update up to 16 MiB with its own seq and delivers it live; refuses a bigger one', async () => {
+    const big = await startServer();
+    try {
+      const owner = await signup(big);
+      const { notebookId } = await createNotebook(big, owner);
+      const noteId = await createNote(big, owner, notebookId);
+      const a = await SyncClient.user(big, owner);
+      const b = await SyncClient.user(big, owner);
+      await a.subscribe(noteId);
+      await b.subscribe(noteId);
+      const payload = b64(rnd(3 * 1024 * 1024));
+      a.send({ type: 'push', docId: noteId, clientMsgId: 'big-1', payload });
+      expect(await a.next((m) => m.clientMsgId === 'big-1', 20_000)).toMatchObject({ type: 'ack', seq: 1 });
+      expect(await b.next((m) => m.type === 'update', 20_000)).toMatchObject({ docId: noteId, seq: 1, payload });
+      // A device that was away catches it up like any update.
+      const c = await SyncClient.user(big, owner);
+      const sub = await c.subscribe(noteId, 0);
+      expect(sub.pages.flatMap((p: any) => p.items.map((i: any) => i.seq))).toEqual([1]);
+      a.send({ type: 'push', docId: noteId, clientMsgId: 'too-big', payload: b64(rnd(16 * 1024 * 1024 + 1)) });
+      expect(await a.next((m) => m.ref === 'too-big', 20_000)).toMatchObject({ type: 'error', code: 'payload_too_large' });
+      for (const x of [a, b, c]) x.close();
+    } finally {
+      await big.close();
+    }
+  }, 60_000);
+});

@@ -1,5 +1,7 @@
 import {
+  MAX_RESUME_DOCS as SHARED_MAX_RESUME_DOCS,
   SYNC_PROTOCOL_LATEST,
+  SYNC_PROTOCOL_RESUME,
   SYNC_PROTOCOL_MIN,
   SYNC_PROTOCOL_VERSION,
   clientMessageSchema,
@@ -31,11 +33,12 @@ export type ServerMessage =
 export const PROTOCOL_VERSION = SYNC_PROTOCOL_VERSION;
 /** Versions accepted in `hello` (sync-protocol.md §2); v2 adds `account_changed`. */
 export const PROTOCOL_MIN = SYNC_PROTOCOL_MIN;
-/**
- * Pinned at 2 until the server implements `resume` (v3, sync-protocol §3.1): shared moves
- * SYNC_PROTOCOL_LATEST ahead of the server; it rises to it together with the implementation.
- */
-export const PROTOCOL_LATEST: number = Math.min(SYNC_PROTOCOL_LATEST, 2);
+/** v3 adds `resume` / `resumed` (sync-protocol.md §3.1). */
+export const PROTOCOL_LATEST: number = SYNC_PROTOCOL_LATEST;
+/** The first version with `resume`. */
+export const RESUME_SINCE = SYNC_PROTOCOL_RESUME;
+/** At most this many entries in `resumed.docs` / `resumed.removed`; more → `reset`. */
+export const MAX_RESUME_DOCS = SHARED_MAX_RESUME_DOCS;
 /** The first version that receives `account_changed` (sync-protocol.md §6). */
 export const ACCOUNT_CHANGED_SINCE = 2;
 

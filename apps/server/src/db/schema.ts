@@ -187,11 +187,39 @@ export const docs = pgTable(
     keyChain: jsonb('key_chain').$type<string[]>().notNull().default([]),
     keyRotationPending: boolean('key_rotation_pending').notNull().default(false),
     pendingSinceVersion: integer('pending_since_version'),
+    /** Change-log position of the newest accepted update (sync protocol 3, `resume`); 0 before any. */
+    changedPos: bigint('changed_pos', { mode: 'number' }).notNull().default(0),
     createdAt: created(),
     updatedAt: ts('updated_at').notNull().defaultNow(),
   },
   (t) => [index('docs_user_idx').on(t.userId), index('docs_notebook_idx').on(t.notebookId)],
 );
+
+/**
+ * What each account could read when it last resumed (sync protocol 3, sync-protocol.md §3.1):
+ * the server compares it with the account's current access on every `resume`, so documents that
+ * became readable or stopped being readable get a change-log position. No reference to `docs`:
+ * a deleted document stays here as removed. Removed rows are pruned after RESUME_KEEP_DAYS.
+ */
+export const userDocs = pgTable(
+  'user_docs',
+  {
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    docId: uuid('doc_id').notNull(),
+    grantedPos: bigint('granted_pos', { mode: 'number' }).notNull(),
+    removedPos: bigint('removed_pos', { mode: 'number' }),
+    changedAt: ts('changed_at').notNull().defaultNow(),
+  },
+  (t) => [primaryKey({ columns: [t.userId, t.docId] })],
+);
+
+/** Server-wide values (the change-log epoch of this database). */
+export const serverMeta = pgTable('server_meta', {
+  key: text('key').primaryKey(),
+  value: text('value').notNull(),
+});
 
 export const docUpdates = pgTable(
   'doc_updates',

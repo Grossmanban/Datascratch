@@ -1,3 +1,4 @@
+import type { ChangeLog } from './change-log.js';
 import { and, asc, desc, eq, gt, lte, lt, sql } from 'drizzle-orm';
 import type { DbOrTx } from '../db/client.js';
 import { docSnapshots, docUpdates, docs, type AuthorRef } from '../db/schema.js';
@@ -74,6 +75,8 @@ export class DocumentService {
     private readonly retention: RetentionPolicy,
     /** Bytes an account may store (0: unlimited); see quotaCheck. */
     private readonly quotaBytes = 0,
+    /** Change-log positions of accepted updates (sync protocol 3); none in unit setups. */
+    private readonly changes: ChangeLog | null = null,
   ) {}
 
   /**
@@ -100,13 +103,18 @@ export class DocumentService {
 
   /** Append an update with the next seq. The doc row lock serializes writers per document. */
   async append(db: DbOrTx, input: AppendInput): Promise<AppendResult> {
-    try {
-      return await this.#append(db, input);
-    } catch (e) {
-      // A concurrent retry with the same clientMsgId won the race: report its seq.
-      if (input.clientMsgId && isUniqueViolation(e)) return this.#append(db, input);
-      throw e;
-    }
+    const run = async () => {
+      try {
+        return await this.#append(db, input);
+      } catch (e) {
+        // A concurrent retry with the same clientMsgId won the race: report its seq.
+        if (input.clientMsgId && isUniqueViolation(e)) return this.#append(db, input);
+        throw e;
+      }
+    };
+    // The position stays in flight until the transaction is over (a caller's outer one too:
+    // it wraps its own work in changes.scope).
+    return this.changes ? this.changes.scope(run) : run();
   }
 
   async #append(db: DbOrTx, input: AppendInput): Promise<AppendResult> {
@@ -139,9 +147,12 @@ export class DocumentService {
         }
       }
       await this.quotaCheck(tx, input.docId, input.payload.byteLength);
+      // Allocated under the row lock, so a document's positions grow with its seq.
+      const pos = this.changes?.allocate();
       const [row] = await tx
         .update(docs)
         .set({
+          ...(pos ? { changedPos: pos } : {}),
           lastSeq: sql`${docs.lastSeq} + 1`,
           updatesSinceSnapshot: sql`${docs.updatesSinceSnapshot} + 1`,
           bytesSinceSnapshot: sql`${docs.bytesSinceSnapshot} + ${input.payload.byteLength}`,

@@ -43,7 +43,8 @@ export class PgAgentDataSource implements AgentDataSource {
 
   #scope<T>(userId: string, grantId: string | undefined, fn: (tx: Tx, after: (() => unknown)[]) => Promise<T>) {
     const after: (() => unknown)[] = [];
-    return withAgentScope(this.ctx.database.db, { userId, grantId }, (tx) => fn(tx, after)).then(async (r) => {
+    // Change-log positions of the updates written inside stay in flight until this commits.
+    return this.ctx.changes.scope(() => withAgentScope(this.ctx.database.db, { userId, grantId }, (tx) => fn(tx, after))).then(async (r) => {
       for (const cb of after) {
         try {
           await cb();

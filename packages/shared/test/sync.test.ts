@@ -198,15 +198,27 @@ describe("sync client", () => {
     expect(hooked).toBe(0);
   });
 
-  it("sends oversized updates as a snapshot", async () => {
+  it("sends a big change (> 2 MiB) as a regular push with its own seq", async () => {
     const hub = new MemorySyncHub();
     const a = makeClient(hub, "dev-a");
     const da = new Y.Doc();
     await a.client.addDoc(DOC, da);
     a.client.start();
     await until(() => a.client.isSynced(DOC));
-    const big = "y".repeat(3 * 1024 * 1024);
-    da.getText("t").insert(0, big);
+    da.getText("t").insert(0, "y".repeat(3 * 1024 * 1024));
+    await a.client.whenSent(DOC);
+    expect(hub.docs.get(DOC)!.snapshot).toBeNull();
+    expect(hub.docs.get(DOC)!.items).toHaveLength(1);
+  });
+
+  it("falls back to a snapshot when an older server refuses a big push", async () => {
+    const hub = new MemorySyncHub({ maxUpdateBytes: 2 * 1024 * 1024 });
+    const a = makeClient(hub, "dev-a");
+    const da = new Y.Doc();
+    await a.client.addDoc(DOC, da);
+    a.client.start();
+    await until(() => a.client.isSynced(DOC));
+    da.getText("t").insert(0, "y".repeat(3 * 1024 * 1024));
     await until(() => hub.docs.get(DOC)!.snapshot !== null);
     expect(hub.docs.get(DOC)!.items).toHaveLength(0);
   });

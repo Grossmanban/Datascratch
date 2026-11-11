@@ -25,7 +25,12 @@ export const SYNC_PATH = "/v1/sync";
 export const SYNC_PING_INTERVAL_MS = 25_000;
 
 /** Decoded payload limits (sync-protocol.md §7). */
-export const MAX_UPDATE_BYTES = 2 * 1024 * 1024;
+/**
+ * An update may be as large as a snapshot (2026-11-11, was 2 MiB): a big change (a pasted book,
+ * an import) goes as a regular `push` and gets its own seq, so catch-up and relay need no special
+ * case. A client still answers `payload_too_large` from an older server with a snapshot.
+ */
+export const MAX_UPDATE_BYTES = 16 * 1024 * 1024;
 export const MAX_SNAPSHOT_BYTES = 16 * 1024 * 1024;
 
 /** A client compacts a document once either threshold is exceeded (sync-protocol.md §5). */

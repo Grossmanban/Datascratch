@@ -1,6 +1,8 @@
 import cors from '@fastify/cors';
 import rateLimit from '@fastify/rate-limit';
 import swagger from '@fastify/swagger';
+import { stepOf } from './lib/diag.js';
+import { hashQueue } from './lib/password.js';
 import Fastify, { type FastifyError, type FastifyInstance, type FastifyRequest } from 'fastify';
 import {
   hasZodFastifySchemaValidationErrors,
@@ -135,7 +137,7 @@ export async function buildApp(ctx: AppContext, opts: BuildOptions = {}): Promis
   app.addHook('onResponse', async (req, reply) => {
     ctx.metrics.httpRequests.inc({ method: req.method, status: `${Math.floor(reply.statusCode / 100)}xx` });
   });
-  watchStalls(app as unknown as FastifyInstance);
+  watchStalls(app as unknown as FastifyInstance, ctx.database.pool);
   const { pool } = ctx.database;
   ctx.metrics.gauge('ds_db_pool_total', 'PostgreSQL pool connections.', () => pool.totalCount);
   ctx.metrics.gauge('ds_db_pool_idle', 'Idle PostgreSQL pool connections.', () => pool.idleCount);
@@ -196,11 +198,14 @@ export const STALL_WARN_MS = 30_000;
  * body (bytes received of content-length, complete or not) or the handler — when the client gives
  * up (`request aborted`) or when it is still running after STALL_WARN_MS (`request stalled`).
  */
-function watchStalls(app: FastifyInstance) {
+function watchStalls(app: FastifyInstance, pool: { totalCount: number; idleCount: number; waitingCount: number }) {
   type Watch = { start: number; stage: 'body' | 'handler'; bytes: number; done: boolean; timer?: NodeJS.Timeout };
   const watches = new WeakMap<object, Watch>();
   const facts = (req: FastifyRequest, w: Watch) => ({
     method: req.method,
+    step: stepOf(req),
+    hashQueue: hashQueue(),
+    dbPool: { total: pool.totalCount, idle: pool.idleCount, waiting: pool.waitingCount },
     url: req.routeOptions.url ?? req.url.split('?')[0],
     elapsedMs: Date.now() - w.start,
     stage: w.stage,

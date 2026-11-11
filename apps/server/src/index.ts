@@ -1,3 +1,4 @@
+import { warmUpHashing } from './lib/password.js';
 import { buildApp } from './app.js';
 import { loadConfig } from './config.js';
 import { createContext } from './context.js';
@@ -35,6 +36,7 @@ async function main() {
   const ctx = createContext({ config, log, database, storage, jobs });
   await registerJobs(ctx);
   const app = await buildApp(ctx);
+  await warmUpHashing();
   await app.listen({ host: config.HOST, port: config.PORT });
 
   let stopping = false;

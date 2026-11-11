@@ -98,6 +98,10 @@ describe('requests that never finish (diagnostics)', () => {
         found = lines.map((l) => JSON.parse(l)).find((l) => l.msg === 'request aborted');
       }
       expect(found).toMatchObject({ url: '/v1/auth/signup', stage: 'body', contentLength: 500, bodyBytes: part.length, bodyComplete: false });
+      // Where waiting could happen: the password hashing queue and the database pool.
+      expect(found.hashQueue).toEqual({ running: expect.any(Number), waiting: expect.any(Number) });
+      expect(found.dbPool).toEqual({ total: expect.any(Number), idle: expect.any(Number), waiting: expect.any(Number) });
+      expect(found.step).toBeNull();
       expect(lines.join('')).not.toContain('secret-part');
     } finally {
       await logged.close();

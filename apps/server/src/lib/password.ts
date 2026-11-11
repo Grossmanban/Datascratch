@@ -33,6 +33,11 @@ async function limited<T>(run: () => Promise<T>): Promise<T> {
   }
 }
 
+/** How many hashes run and wait now (diagnostics). */
+export function hashQueue(): { running: number; waiting: number } {
+  return { running, waiting: waiting.length };
+}
+
 export const hashSecret = (secret: Uint8Array): Promise<string> => limited(() => hash(own(secret), OPTIONS));
 
 export async function verifySecret(phc: string, secret: Uint8Array): Promise<boolean> {
@@ -45,6 +50,15 @@ export async function verifySecret(phc: string, secret: Uint8Array): Promise<boo
 }
 
 let dummyHash: Promise<string> | undefined;
+
+/**
+ * Hash once before serving: the first Argon2 call of a fresh process is slow (ios-app CI saw a
+ * 4 s first sign-up), and it also prepares the dummy hash for unknown emails.
+ */
+export async function warmUpHashing(): Promise<void> {
+  dummyHash ??= hashSecret(Buffer.alloc(32));
+  await dummyHash;
+}
 
 /** Burn the same time as a real verification so unknown emails are not distinguishable by timing. */
 export async function verifyDummy(secret: Uint8Array): Promise<false> {

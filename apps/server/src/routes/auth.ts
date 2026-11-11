@@ -1,3 +1,4 @@
+import { markStep } from '../lib/diag.js';
 import { and, eq, isNull, sql } from 'drizzle-orm';
 import type { FastifyPluginAsyncZod } from 'fastify-type-provider-zod';
 import { z } from 'zod';
@@ -124,6 +125,7 @@ export function authRoutes(ctx: AppContext): FastifyPluginAsyncZod {
       },
       async (req) => {
         perEmail('signup', req.body.email, req.ip);
+        markStep(req, 'lookup');
         const b = req.body;
         const loginKey = fromB64(b.loginKey);
         const wrappedPw = fromB64(b.wrappedMasterKeyPassword);
@@ -146,16 +148,20 @@ export function authRoutes(ctx: AppContext): FastifyPluginAsyncZod {
         if (ctx.config.DS_SIGNUP === 'invite' && !inviteOk(b.inviteCode)) {
           throw forbidden('a valid invite code is required');
         }
+        markStep(req, 'hash');
         const [loginHash, recoveryHash] = await Promise.all([
           hashSecret(loginKey),
           hashSecret(fromB64(b.recoveryLoginKey)),
         ]);
         const lostRace = Symbol('lost race');
+        markStep(req, 'transaction');
         const created = await db.transaction(async (tx) => {
           const cap = ctx.config.DS_SIGNUP === 'open' ? ctx.config.DS_SIGNUP_DAILY_LIMIT : 0;
           if (cap > 0) {
             // One sign-up at a time while counting, so parallel requests cannot pass the cap together.
+            markStep(req, 'signup-lock');
             await tx.execute(sql`SELECT pg_advisory_xact_lock(7478)`);
+            markStep(req, 'transaction');
             const [recent] = (
               await tx.execute<{ n: number }>(sql`SELECT count(*)::int AS n FROM users WHERE created_at > now() - interval '24 hours'`)
             ).rows;
@@ -186,9 +192,11 @@ export function authRoutes(ctx: AppContext): FastifyPluginAsyncZod {
             .onConflictDoNothing()
             .returning({ id: docs.id });
           if (doc.length === 0) throw conflict(SIGNUP_CONFLICT);
+          markStep(req, 'session');
           return createSession(ctx, tx, user, b.deviceName ?? 'Unknown device');
         });
         if (created !== lostRace) return created;
+        markStep(req, 'retried');
         const winner = await retried();
         if (!winner) throw conflict(SIGNUP_CONFLICT);
         return winner;
